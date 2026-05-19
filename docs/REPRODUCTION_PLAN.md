@@ -1,286 +1,330 @@
-# VINGS-Mono 复现计划
+# VINGS-Mono 复现计划 v2
 
-> 课程期末项目，4 人小组。本计划目标：**稳扎稳打把必做项做漂亮，再争取一项可选项加分**。
->
-> 论文：Wu et al., *VINGS-Mono: Visual-Inertial Gaussian Splatting Monocular SLAM in Large Scenes*, TRO 2025 (arXiv:2501.08286)
-> 官方仓库：<https://github.com/Fudan-MAGIC-Lab/VINGS-Mono>
+> **v2 改动要点**：
+> - 时间盘子压到 **15 天**
+> - 硬件 = AutoDL **RTX 4090**（去掉硬件焦虑）
+> - 两个可选项（手机端 + 同济校园自采）**都必须高质量完成**
+> - 任务按 **4 个独立子领域** 切，每人一块，PPT 各自讲各自的
+> - 不复用去年 CV 课的 3DGS app
 
----
-
-## 0. 课程目标与本计划的对应
-
-| 课程要求 | 优先级 | 我们的目标 |
-| --- | --- | --- |
-| 在自己电脑上复现 VINGS-Mono | **必做** | 在至少 1 个室内 + 1 个室外数据集上跑通，并复现论文里的关键指标（ATE / PSNR / Gaussian 数量） |
-| 在手机上复现 | 可选 | 视时间和服务器情况争取做，主力在 PC 侧；做不了就不强求 |
-| 用同济校园自采数据跑 | 可选鼓励 | 准备一段 5–10 分钟的校园骑行 / 步行数据，作为亮点放进报告与答辩 |
-
-我们的策略：**必做保 95 分，争取至少做完一项可选，把整体目标推到 100 / 满分。**
+论文：Wu et al., *VINGS-Mono: Visual-Inertial Gaussian Splatting Monocular SLAM in Large Scenes*, TRO 2025
+官方仓库：<https://github.com/Fudan-MAGIC-Lab/VINGS-Mono>
 
 ---
 
-## 1. 论文一句话总结（统一组员认知）
+## 0. 任务目标
 
-VINGS-Mono = **DROID-SLAM 风格的稠密 BA 前端 + GTSAM 视觉-惯性因子图** 提供位姿和稠密深度，作为 **2D Gaussian Splatting (2DGS) 地图** 的初始化与监督；同时引入 4 个核心模块解决"大场景 + 单目"的痛点：
-
-1. **Score Manager** — 给每个 Gaussian 维护贡献分 \(S_C\) 和误差分 \(S_E\)，做稳定/不稳定状态切换、剪枝、以及 CPU↔GPU swap，把数千万 Gaussian 装进单卡。
-2. **Sample Rasterizer** — 改造 2DGS 反向传播为 *Gaussian 维度并行 + 像素采样*，反传速度提升 273%。
-3. **Single-to-Multi Pose Refinement** — 一次渲染回传梯度同时优化视锥内所有可见关键帧位姿，相比只优化当前帧的方法 ATE 更低。
-4. **NVS Loop Closure** — 用 LightGlue 匹配特征点 + PnP 求相对位姿 + 渲染新视角与原图比对来判断回环；闭环后用每个 Gaussian 绑定的关键帧位姿一次性纠正所有 Gaussian 属性。
-5. **Dynamic Eraser** — 用 FastSAM 出语义 mask + 重渲染损失（SSIM·L1·深度不确定度）筛选动态物体 mask。
-
-记住这五个模块是答辩讲解和消融实验的主线。
+| 课程要求 | 状态 |
+| --- | --- |
+| 在自己电脑/服务器上复现 VINGS-Mono | **必做 — 力求精彩** |
+| 在手机上复现 | **必做 — 优质完成** |
+| 用同济校园自采数据跑 | **必做 — 优质完成** |
 
 ---
 
-## 2. 技术栈速查
+## 1. 论文 5 大模块（PPT 主线）
 
-| 模块 | 关键依赖 | 备注 |
-| --- | --- | --- |
-| VIO 前端 | DROID-SLAM (DBA + RAFT correlation) | 需要 `droid.pth` 权重 |
-| 因子图 | GTSAM（vio 分支 fork：<https://github.com/Promethe-us/gtsam/tree/vio>） | **要从源码编 Python binding**，是最大的坑 |
-| 地图 | 2DGS rasterizer + Sample Rasterizer (CUDA 扩展) | 编译需要 nvcc 11.8 |
-| 回环检测 | SuperPoint + LightGlue (ONNX) | 权重已在 HuggingFace |
-| 单目深度先验（可选） | Metric3D (`metric_depth_vit_small_800k.pth`) | 手机端 / 自采数据强烈建议开 |
-| 动态分割 | FastSAM (`FastSAM-x.pt`) | 静态场景可以先不开 |
-| 评测 | `evo` toolkit | ATE / RPE |
+每位组员主讲其中 1–2 个模块，配合自己的实验：
 
-环境基线：**Python 3.9.19 + CUDA 11.8**（官方 README 明确给出），别用 12.x，不然 GTSAM/CUDA 扩展会编译失败。
+1. **VIO Front End**（Sec. IV）— DROID-SLAM DBA + IMU 因子图 → **Person A**
+2. **2D Gaussian Map**（Sec. V）— Score Manager / Sample Rasterizer / Pose Refinement → **Person B**
+3. **NVS Loop Closure**（Sec. VI）— LightGlue 匹配 + 渲染验证 + Gaussian-Pose 配对 → **Person C**
+4. **Dynamic Eraser**（Sec. VII）— FastSAM mask × 重渲染损失 → **Person C**
+5. **System & Application**（Sec. VIII + Mobile App）— 实地部署 + 校园数据 → **Person D**
 
 ---
 
-## 3. 硬件 / 资源评估（**关键风险，请先确认**）
+## 2. 4 人任务包（**均衡分工 + 各自可独立答辩**）
 
-论文是在 **单卡 RTX 4090（24GB） + Xeon 6133** 上跑的。论文表 IX 的实测数据：
+> 每人分到的总工作量约 **15 人天**，对应 PPT 4–5 分钟讲解。
 
-| 数据集 | 帧数 | 总运行时间 | 模型大小 |
+### Person A — 前端 & 系统部署（"基础设施"）
+
+**PPT 主题**："**视觉惯性前端：稠密 BA + 因子图融合**"
+
+| 责任 | 具体内容 |
+| --- | --- |
+| 部署 | AutoDL 4090 环境搭建（Python 3.9.19 + CUDA 11.8 + PyTorch 2.0），编译 GTSAM (vio 分支)、2DGS rasterizer、Sample Rasterizer 三个 CUDA 扩展，**做成镜像快照供 B/C/D 复用** |
+| 模块讲解 | DROID-SLAM 的 RAFT 相关性 + Dense BA（论文式 1-5）；IMU 预积分因子（论文式 6-8）；深度协方差（论文式 9） |
+| 实验 1 | **VO 对比**（论文表 II）：在 Waymo Scene01 跑纯 mono；与 DROID-SLAM、ORB-SLAM3 对比 ATE |
+| 实验 2 | **VIO 对比**（论文表 III）：在 KITTI Odom 07 同时跑 mono-only 和 mono+IMU；记录 trel / rrel |
+| 交付物 | `docs/SETUP.md`（环境踩坑记）+ `results/frontend/`（轨迹文件 + 指标表）+ AutoDL 镜像 ID |
+
+### Person B — 2D 高斯建图（"核心方法"，工作量最重 → 拿主创署名）
+
+**PPT 主题**："**2D Gaussian 高效建图：分数管理 + 采样光栅化 + 多帧位姿优化**"
+
+| 责任 | 具体内容 |
+| --- | --- |
+| 模块讲解 | 在线建图流程（Sec. V-A，论文式 10-12）+ Score Manager（Sec. V-B，Algo. 1）+ Sample Rasterizer（Sec. V-C，图 3）+ Single-to-Multi Pose Refinement（Sec. V-D，式 14） |
+| 实验 1 | **Hotel demo + Hierarchical-SmallCity demo 完整跑通**（论文表 II / V 的对应行） |
+| 实验 2 | **Score Manager 消融**（论文表 VII）：在 ScanNet-0106 + Waymo-Scene13 上跑 5 组阈值（0 / 0.8 / 12.8 / 25.6 / 102.4），记录 Gaussian 数量 + PSNR |
+| 实验 3 | **Sample Rasterizer profiling**（论文图 11）：对比原版 2DGS / Taming3DGS / 我们的 Sample Rasterizer 三种反传策略的时间和 PSNR |
+| 实验 4 | **Pose Refinement 消融**（论文表 VIII）：3 种策略 × 3 个场景 = 9 组实验 |
+| 交付物 | `docs/ABLATION.md` + `results/mapping/` + 1 段 2 分钟的 SmallCity BEV 建图过程录屏 |
+
+### Person C — 回环 + 动态 + 长序列（"鲁棒性"）
+
+**PPT 主题**："**大场景一致性：NVS 回环检测 + 动态物体擦除**"
+
+| 责任 | 具体内容 |
+| --- | --- |
+| 模块讲解 | NVS Loop Closure 三步走（特征匹配 + PnP + 渲染验证，论文图 4） + Loop Correction（Gaussian-Pose 配对 + 一次性更新，论文式 15） + Dynamic Eraser（FastSAM + 重渲染损失，论文式 16） |
+| 实验 1 | **KITTI Odom 08（5177 帧，3.2 km）完整跑完**：长序列稳定性验证 + 触发并展示回环效果（论文图 10 复现） |
+| 实验 2 | **回环开/关对比**：在同一序列上分别跑开闭环 / 不开闭环，对比 ATE 漂移 |
+| 实验 3 | **Dynamic Eraser 消融**（论文表 IV）：在 BONN dynamic 数据集 4 个序列上跑"开/关"，记录 ATE |
+| 实验 4 | **TSDF mesh 导出**：在 Waymo Scene01 上跑 + 导出 mesh + 用 CloudCompare / Meshlab 出渲染图（论文图 9 复现） |
+| 交付物 | `results/loop/`（轨迹 + BEV 截图）+ `results/dynamic/`（BONN 结果表）+ 1 段 1 分钟回环纠正前后对比的录屏 |
+
+### Person D — 实地应用（"两个可选项 + 报告"）
+
+**PPT 主题**："**实地落地：同济校园建图 + 手机端实时 SLAM**"
+
+| 责任 | 具体内容 |
+| --- | --- |
+| **可选 1：同济校园自采** | (a) 路线规划（图书馆 → 大礼堂 → 三好坞，~1.5 km × 0.5 km，10 km/h 骑行）<br>(b) iPhone 30Hz 视频 + 50Hz IMU + 1Hz GPS 采集<br>(c) 数据预处理（IMU 标定 / 时间同步 / 转 Demo1 格式）<br>(d) 跑 VINGS-Mono 完整建图<br>(e) BEV 地图 + GPS 轨迹叠图（论文图 12 同款） |
+| **可选 2：手机端复现** | (a) AutoDL 开 4090 服务端，跑作者的 server-side VINGS-Mono<br>(b) 在 Android 手机上装作者提供的 [官方 APK](https://github.com/victkk/3DGS_SLAM_mobile_app)<br>(c) 配通手机 → 服务器的 RGB+IMU 推流（WiFi / 4G）<br>(d) 手机屏幕实时显示 BEV 地图 + 渲染图（论文图 13 同款）<br>(e) 录制室内 + 室外 2 段实机演示 |
+| 横向对比 | 校园数据 vs Hierarchical-SmallCity：定性比较两者的 Gaussian map 质量；定量比较 trajectory length / Gaussian 数量 / GPU 占用 |
+| 交付物 | `results/tongji_campus/`（完整建图结果） + `results/mobile/`（手机端联调录屏 ≥ 2 段）+ 1 段 3 分钟"同济校园 SLAM"答辩视频 + 报告主笔（章节后面会说） |
+
+> **D 同学比较辛苦**：要兼顾两个 optional，但**采集只占 1 天，剩下的预处理与跑实验时间是可控的**。手机端的真正瓶颈是"服务器配通 + 网络打通"，不在 D 一个人 — 让 A 在 D5 之后协助打通服务端联调（A 是熟环境的人）。
+
+---
+
+## 3. 15 天日程表（每日每人）
+
+> 时间标记：**D1 = 项目启动当天**。所有人**白天 4–6 小时**专注本项目 = 每人 ~75 小时 ≈ 15 人天。
+
+### D1 — 启动
+
+| 全员 | 论文精读（每人精读 1 个章节并准备晚上 10 分钟讲解：A→Sec.IV，B→Sec.V，C→Sec.VI+VII，D→Sec.VIII） |
+| --- | --- |
+| A | 开 AutoDL 4090 × 1 台，开始装环境 |
+| B | 把官方仓库 clone + 看 `configs/` 和 `scripts/run.py` 入口 |
+| C | 看 Loop Closure 和 Dynamic Eraser 的源码位置 |
+| D | 列校园采集路线 + 借手机三脚架 / 自行车架；研究官方 APK 仓库 |
+
+晚上：**第 1 次例会**（论文互讲 + 同步明天分工）。
+
+### D2 — 环境 + 论文
+
+| A | 环境继续，重点解决 GTSAM 编译；准备**镜像快照** |
+| --- | --- |
+| B | 论文 Sec. V 二刷 + 看 2DGS rasterizer 源码；列消融实验配置 |
+| C | 看 LightGlue + FastSAM 集成代码；申请 BONN 数据集 |
+| D | 校园路线试走（不采，先确认信号和路况） |
+
+### D3 — 跑通 Demo
+
+| A | **A 必须完成环境** + 跑通 Hotel demo + 把镜像快照分享给 B/C/D；写 `docs/SETUP.md` v1 |
+| --- | --- |
+| B | 拿到镜像，自己开 1 台 AutoDL，跑 Hotel demo + SmallCity demo |
+| C | 拿到镜像，自己开 1 台 AutoDL，下载 KITTI 数据 |
+| D | 申请并下载 BONN dataset；准备 iPhone + 三脚架 |
+
+晚上：**第 2 次例会**（环境 OK 否 → 决定 D4 的实验排程）。
+
+### D4 — 实验开跑
+
+| A | KITTI 07 mono-only 跑通；同时尝试 mono+IMU |
+| --- | --- |
+| B | 跑 SmallCity 完整序列；记录 baseline 数据（不消融） |
+| C | 跑 KITTI 08 起步（不求完跑，先看几百帧能否稳定） |
+| D | **校园数据采集**（白天进行，~半天）；同步研究官方 APK 怎么编译 |
+
+### D5 — 实验深入
+
+| A | 整理 KITTI 07 结果；开始 Waymo Scene01；写前端章节 PPT 大纲 |
+| --- | --- |
+| B | Score Manager 消融第 1 组 + 第 2 组（不同阈值） |
+| C | KITTI 08 完整跑完；触发回环并截图 |
+| D | 校园数据预处理（视频抽帧 + IMU 时间戳对齐 + 转 Demo 格式）；A 协助开服务端 |
+
+### D6 — 实验深入 II
+
+| A | Waymo 跑完；KITTI 07 mono+IMU 跑完 → 完成"前端表 II + 表 III" |
+| --- | --- |
+| B | Score Manager 消融第 3-5 组 |
+| C | 开闭环对比实验（同一 KITTI 08 / KITTI360 序列） |
+| D | 校园数据跑 VINGS-Mono 第一遍；A 帮 D 把官方 APK 部署到 D 的安卓手机上 |
+
+晚上：**第 3 次例会**（中期检查）。
+
+### D7 — 推进
+
+| A | 写前端章节 PPT 与报告草稿（4–5 页）；开始 profiling 时间分析 |
+| --- | --- |
+| B | Sample Rasterizer profiling（原版 vs Ours）；Pose Refinement 消融跑 3 组 |
+| C | BONN dynamic eraser 实验 4 个序列 + 表格整理 |
+| D | 校园数据跑通 + 出 BEV 图；联调手机端推流（先把"手机能连上服务器"打通） |
+
+### D8 — 推进
+
+| A | 帮 B/C/D 调他们卡住的实验环境问题；前端 PPT 80% 完成 |
+| --- | --- |
+| B | Pose Refinement 消融剩余 6 组跑完；开始整理 `docs/ABLATION.md` |
+| C | TSDF mesh 导出 + CloudCompare 出图；开始整理回环章节 PPT |
+| D | 手机端推流跑通；录制第 1 段"手机端建图"演示视频（室内） |
+
+### D9 — 收口实验
+
+| A | 所有前端实验复跑 1 次验证可重复性；导出最终 trajectory 文件 |
+| --- | --- |
+| B | 消融完成 → `docs/ABLATION.md` 第一版；选出 SmallCity 最漂亮的一段做 BEV 录屏 |
+| C | KITTI 长序列录屏（回环纠正前后对比 2 段）；dynamic eraser 演示录屏 |
+| D | 校园数据建图最终结果 + 与 SmallCity 横向对比表；录第 2 段"手机端建图"演示（室外） |
+
+### D10 — 开始写
+
+| 全员 | 实验全部完成 → **进入写作阶段**，禁止再开新实验（重要！避免拖时间） |
+| --- | --- |
+| A | 报告 Sec. 1（引言）+ Sec. 4（前端） |
+| B | 报告 Sec. 5（2D Gaussian Map）+ Sec. 6（消融） |
+| C | 报告 Sec. 7（回环 + 动态） |
+| D | 报告 Sec. 8（实地应用 + 手机端）+ 整体格式协调（建议 D 主笔，因为最熟全局） |
+
+### D11 — 报告 v1 完成
+
+| 全员 | 各自章节写完 → 合并到主分支，互审 |
+| --- | --- |
+| 晚上 | **第 4 次例会**：互审报告，列出修改清单 |
+
+### D12 — 报告 v2 + PPT 开工
+
+| A | 修改报告 + 完成 PPT（4–5 页） |
+| --- | --- |
+| B | 修改报告 + 完成 PPT（5–6 页，方法+消融最多） |
+| C | 修改报告 + 完成 PPT（4 页） |
+| D | 修改报告 + 完成 PPT（4 页含视频嵌入）+ 报告整体排版 |
+
+### D13 — 答辩素材 + 视频整合
+
+| 全员 | 各自 PPT 终稿；D 把所有录屏剪成 **1 段 3 分钟 highlight reel**（含 SmallCity / 校园 / 手机端 / 回环 4 段） |
+| --- | --- |
+
+### D14 — 彩排
+
+| 全员 | 第 1 次完整彩排（每人 5 分钟 + 全员 Q&A 5 分钟） → 收反馈 → 修订 PPT |
+| --- | --- |
+
+### D15 — Buffer + 终彩排
+
+| 全员 | 最后一次彩排 + buffer 应对任何意外（提交格式、视频压缩、ppt 字体丢失等） |
+| --- | --- |
+
+---
+
+## 4. 复现成功的量化指标（**用于自检 & 答辩**）
+
+直接对照论文表格。每人对自己的实验负责：
+
+| 实验 | 负责人 | 论文值 | 我们目标值 |
 | --- | --- | --- | --- |
-| Waymo-Scene01 | 198 | 117 s | 386 MB |
-| Hierarchical-SmallCity | 877 | 739 s | 1.8 GB |
-| KITTI-Odom08 | 5177 | 4560 s（≈76 分钟） | 10.4 GB |
-| KITTI360-drive_0006 | — | — | 51.7 M Gaussians（GPU+CPU） |
+| BundleFusion-apt0 ATE (cm) | B | 44.22 | ≤ 70 |
+| Hierarchical-SmallCity ATE (m) | B | 2.82 | ≤ 4.0 |
+| Hierarchical-SmallCity PSNR | B | 22.07 | ≥ 20.5 |
+| KITTI-07 trel (%) | A | 1.01 | ≤ 1.5 |
+| KITTI-08 ATE drift | C | — | 完整跑完且触发至少 1 次回环 |
+| BONN ball ATE (cm) | C | 4.08 | ≤ 8 |
+| Waymo-01 ATE (m) | A | 0.91 | ≤ 1.5 |
+| 校园数据 trajectory 长度 | D | — | ≥ 1 km |
+| 手机端实机演示 | D | — | 室内 + 室外各 1 段 ≥ 30 秒 |
+| Score Manager 表 VII | B | Gaussian 数量减半 PSNR 几乎不降 | 在 1 个 indoor + 1 个 outdoor 上复现趋势 |
+| Pose Refinement 表 VIII | B | 我们 > current-only > 不做 | 趋势一致 |
 
-按这个推下我们小组的硬件需要：
+只要 **≥ 9/11 项** 达标，就足以写"复现成功且充分超越基线"。
 
-| 任务 | 显存需求（建议） | 备注 |
+---
+
+## 5. AutoDL 4090 使用规划
+
+| 阶段 | 实例数 | 用途 |
 | --- | --- | --- |
-| Hotel / Hierarchical-SmallCity Demo | 8–12 GB | 1660 Ti / 3060 / 3070 即可 |
-| Waymo / KITTI 单段 | 16 GB+ | 3080/3090/4070 Ti 比较稳；4090 最佳 |
-| KITTI360 完整、千万级 Gaussian | 24 GB（4090 / A6000） | 没条件就**只跑短段** |
+| D1-D3 环境期 | 1 台 | A 装环境 + 做镜像 |
+| D4-D9 实验期 | **2–4 台并行** | A / B / C / D 各 1 台（D 在 D6-D9 才需要）|
+| D10-D15 写作期 | 0–1 台 | 保留 1 台用于紧急复跑 |
 
-**小组动作项 P0**：4 个人各自报一下手头能用的 GPU（型号 + 显存），以及是否能用同济服务器 / 实验室卡。这个决定了我们能跑到什么规模。
+**成本估算**（4090 单卡约 1.7–2.5 元/小时）：
+- 单台 24 小时 × 15 天 = 360 小时 ≈ 700 元
+- 4 台并行 6 天 × 8 小时/天 = 192 小时 ≈ 400 元
+- **保守预算 ~ ¥1500–2000，4 人分摊每人 500 块以内**
 
----
-
-## 4. 阶段时间线（**按"W = 第 N 周"标注，建议总时长 6 周；如截止日近可压到 4 周**）
-
-> 每个阶段都给了：**目标 / 工作内容 / 交付物 / 验收标准 / 风险**。 
-
-### Week 1 — 启动 & 环境（"能跑 import"是底线）
-
-- **目标**：4 个人都 clone 仓库 + 至少 1 台机器能 `import` 通过、跑前 10 帧不报错。
-- **工作内容**
-  - [ ] 每人精读论文 1 遍 + 把官方仓库结构走一遍（`configs/`, `scripts/run.py`, `submodules/`）。
-  - [ ] 把官方仓库以 submodule 形式加进来：
-    ```bash
-    git submodule add https://github.com/Fudan-MAGIC-Lab/VINGS-Mono third_party/VINGS-Mono
-    git submodule update --init --recursive
-    ```
-  - [ ] 按 `set_env.sh` 建 conda 环境（Python 3.9.19 + CUDA 11.8 + PyTorch 2.0.x）。
-  - [ ] 编译 GTSAM (vio 分支)、2DGS rasterizer、sample rasterizer 三个 CUDA 扩展。
-  - [ ] 下载权重：`droid.pth`, `metric_depth_vit_small_800k.pth`, `superpoint.onnx`, `superpoint_lightglue.onnx`。
-  - [ ] 写 `docs/SETUP.md` 把每一步踩过的坑记下来（包括报错截图 + 解决方案）。
-- **交付物**：`docs/SETUP.md`、`environment.yml` 截图
-- **验收标准**：在至少 1 台机器上，能跑：
-  ```bash
-  python scripts/run.py configs/rtg/hotel.yaml
-  ```
-  并看到 BEV / RGB 渲染窗口出现，前 30 帧无 crash。
-- **风险**
-  - **GTSAM 编译失败（最大坑）**：vio 分支需要从源码 build python wrapper，Boost、Eigen 版本要对得上；准备 1 天 buffer。
-  - CUDA 版本不匹配：本机 CUDA driver 必须 ≥ 11.8。
-  - 国内下载 HuggingFace 慢：用 hf-mirror 镜像或者 wget 直链。
-
-### Week 2 — 跑通 2 个官方 Demo + 录像
-
-- **目标**：把 *Hotel*（室内 RGBD）和 *Hierarchical-SmallCity*（室外骑行 RGB）两个 Demo 完整跑完。
-- **工作内容**
-  - [ ] 下载 HuggingFace 上官方处理好的两个 demo 数据。
-  - [ ] 改 `configs/*.yaml` 的 `dataset.root` / `output.save_dir` / `frontend.weight` 三处。
-  - [ ] 跑完整序列，保存：估计轨迹、最终 Gaussian ply、BEV 截图、渲染对比 RGB-GT 图。
-  - [ ] 对照论文表 II / 表 V：
-    - Hotel 我们能预期 PSNR ≈ 22–23 (论文 BundleFusion 各场景平均 20–22)；
-    - SmallCity 我们能预期 ATE ≈ 2.8 m、PSNR ≈ 22；
-  - [ ] **录屏**：起码 SmallCity 一次完整运行的 BEV+RGB 同步录屏，做成报告/答辩素材。
-- **交付物**：两个 demo 的结果文件夹 + 录屏 + 一份简短 `results/demo_results.md`（含 PSNR/ATE 表格）。
-- **验收标准**：两个 demo 的核心指标都落在论文报告值 ±20% 内。
-
-### Week 3 — 在 1 个基准数据集上复现（**这是必做的核心**）
-
-按硬件择优选一个：
-
-| 候选 | 推荐场景 | 难度 | 显存要求 |
-| --- | --- | --- | --- |
-| **Waymo Scene01 / Scene03 / Scene14** | 200–500 帧短序列 | ★★☆ | 12 GB+ |
-| **KITTI Odom 07 / 09** | 1000–1500 帧 | ★★★ | 16 GB+ |
-| **KITTI Odom 08** | 5177 帧 | ★★★★ | 24 GB（论文规模） |
-
-**默认推荐 = Waymo Scene01 + KITTI Odom 07**：能匹配论文表 II / 表 III / 表 VI 的具体数字，又不至于跑一晚上。
-
-- **工作内容**
-  - [ ] 数据预处理：参考官方 `configs/kitti/...` 和 `docs/`，把 KITTI 的 IMU 时间戳对齐（论文有提到 KITTI unsync 数据要修）。
-  - [ ] 跑两次：**(a) Mono-only**、**(b) Mono + IMU**（VIO 模式）。
-  - [ ] 用 `evo` 算 ATE/RPE，与论文表 I/II/III 比对；用 `lpips/ssim/psnr` 算渲染质量，与表 V/VI 比对。
-  - [ ] 把 Gaussian ply 导出，用 SuperSplat / nerfstudio viewer 出 1–2 张漂亮的展示图。
-- **交付物**：`results/<dataset>_<scene>/` 下保存配置、轨迹 TUM/KITTI 格式、PSNR/SSIM/LPIPS 报告、可视化图。
-- **验收标准**：至少在 1 个 outdoor scene 上 ATE ≤ 论文报告值的 1.5 倍，PSNR ≥ 论文报告值 − 1.5 dB。
-
-### Week 4 — 消融实验 & 模块分析（**答辩高分项**）
-
-不需要全做，挑 2 个能讲清楚的就够拿差异化分。建议优先级：
-
-| 优先级 | 消融 | 论文位置 | 工作量 |
-| --- | --- | --- | --- |
-| ★★★ | **Score Manager**（开 / 关 / 不同阈值） | 表 VII | 改 1 个配置开关，跑 3 次 |
-| ★★★ | **Pose Refinement**（无 / 只优化当前帧 / 优化可见关键帧） | 表 VIII | 改前端调用，跑 2 次 |
-| ★★ | **Sample Rasterizer**（原版 2DGS vs. 我们的） | 图 11 | 切换 rasterizer，profile 反传时间 |
-| ★ | Dynamic Eraser 在 BONN 上的开/关 | 表 IV | 需要额外数据集 |
-
-- **工作内容**
-  - [ ] 复现论文表 VII（Score Manager）—— 在 1 个 indoor + 1 个 outdoor 场景上跑不同 `Sstorage_C` 阈值，记录 GS 数量和 PSNR。
-  - [ ] 复现论文表 VIII（Pose Refinement）—— 在 ScanNet-0106、Copyroom、Campus 中选 1 个。
-  - [ ] 给每个消融出一张定量表 + 1 张定性图，写进 `docs/ABLATION.md`。
-- **交付物**：`docs/ABLATION.md`（含图表）+ 原始日志。
-- **验收标准**：至少 2 个消融的趋势方向与论文一致（即使绝对数值有差异）。
-
-### Week 5 — 可选项（**冲分**，按时间决定做哪个）
-
-#### 选项 A：手机端复现
-
-- 用作者提供的 [3DGS_SLAM_mobile_app](https://github.com/victkk/3DGS_SLAM_mobile_app) 编一个 APK（需要 Android Studio 或者 Flutter）。
-- 服务器（带 GPU 的 PC）上跑 VINGS-Mono 服务端；手机推 RGB + IMU 流到服务器。
-- 录一段室内手持视频，回传重建结果。
-- **工作量**：1 人 × 3–4 天。需要稳定 WiFi、Android 手机、GPU 服务器。
-
-#### 选项 B：同济校园自采数据
-
-- 工具：iPhone（30Hz 1080p + 50Hz IMU + 1Hz GPS）或者 GoPro。
-- 路线建议：图书馆 → 大礼堂 → 三好坞，骑行约 8–10 km/h，10 分钟左右。
-- 同步采集 GPS 作为 ground-truth 参考（不是绝对真值，但可对比 trajectory）。
-- 处理：用作者在论文里描述的方法，按 [IMU 标定 + 时间同步 + Demo1 格式打包] 三步走。
-- **工作量**：1–2 人 × 3–5 天。需要先验证 iPhone IMU 频率与质量是否够。
-
-**推荐**：**优先做 B**（校园数据），因为它直接对应作业里"鼓励项"，并且对答辩观感极强（一段同济校园的高质量 Gaussian map 演示，远比手机 APK 更"硬"）。手机端如果时间富余再做。
-
-### Week 6 — 报告 & PPT & 答辩准备
-
-- [ ] **报告**（建议 15–20 页 PDF / LaTeX）
-  - 论文背景 + 我们要解决的问题
-  - 方法原理：5 大模块 + 每个模块的关键公式（用论文式 (4)、(7)、(11)、(13)、(14)、(16)）
-  - 实验复现表格 + 与原论文对比
-  - 消融实验
-  - 自采数据 / 手机端结果（如果做了）
-  - 失败案例 & 分析（哪些场景 ATE 比论文差？为什么？）
-  - 复现过程总结 + 课程感悟
-- [ ] **PPT**（建议 15–20 页）
-  - 1 页 motivation
-  - 2 页 method overview（用论文 Fig.2 pipeline 图）
-  - 5 页核心模块（每模块 1 页）
-  - 5 页实验结果（含定量表 + 定性图 + 视频 demo 嵌入）
-  - 2 页消融
-  - 1 页校园 / 手机端 demo
-  - 1 页 conclusion + future work
-- [ ] **答辩视频素材**：把所有跑出来的录屏剪成一段 2–3 分钟的 highlight reel。
-- **交付物**：`docs/REPORT.pdf`、`docs/SLIDES.pdf`、`docs/demo_video.mp4`
+省钱策略：
+1. 镜像做好后，不用的实例**立即关机**（按量付费，不收磁盘费）
+2. 数据集预先下到 AutoDL 公共数据集或自己的数据盘（不随实例释放）
+3. 写作期完全关机，只在需要复跑时再开
 
 ---
 
-## 5. 任务分工（4 人，按个人意愿微调）
-
-| 角色 | 主要职责 | 配对的阶段 |
-| --- | --- | --- |
-| **A. 环境 & 基础设施**（建议组长 / 强工程能力者） | 搭 conda 环境、解决 GTSAM 编译、维护 Docker（可选）、CUDA 扩展 build、写 `SETUP.md` | W1 主，W2-3 持续支持 |
-| **B. 数据 & 实验**（重 Linux / 数据处理） | 下载并预处理 Demo / KITTI / Waymo，跑实验，整理结果 | W2-4 主 |
-| **C. 算法 & 消融**（重论文阅读 / 写代码） | 读懂 score manager / pose refinement / sample rasterizer，做消融实验和定量分析 | W3-4 主 |
-| **D. 演示 & 文档**（重表达 / 美工） | 校园自采数据、录屏、可视化（CloudCompare / SuperSplat）、写报告、做 PPT | W2 起持续，W5-6 主 |
-
-每周一次例会（线上 30 分钟），更新各自进度 + 同步阻塞问题 + 调整下周分工。
-
----
-
-## 6. 复现成功的量化指标（**用来自检和写报告**）
-
-直接对照论文的关键表格：
-
-| 数据集 | 指标 | 论文值 | 我们的目标值 |
-| --- | --- | --- | --- |
-| BundleFusion-apt0 | ATE (cm) | 44.22 | ≤ 70 |
-| BundleFusion-apt0 | PSNR | 20.45 | ≥ 18.5 |
-| Hierarchical-SmallCity | ATE (m) | 2.82 | ≤ 4.0 |
-| Hierarchical-SmallCity | PSNR | 22.07 | ≥ 20.5 |
-| KITTI-Odom07 | trel (%) | 1.01 | ≤ 1.5 |
-| KITTI-Odom07 | rrel (°/100m) | 0.80 | ≤ 1.2 |
-| Waymo-Scene01 | ATE (m) | 0.91 | ≤ 1.5 |
-| Waymo-Scene01 | PSNR | 23.48 | ≥ 22 |
-
-只要至少 4 个指标达标，就足以在报告里写"复现成功"。
-
----
-
-## 7. 已知坑 & 应急预案
+## 6. 风险与应急（v1 基础上更新）
 
 | 坑 | 表现 | 预案 |
 | --- | --- | --- |
-| GTSAM vio 分支编译失败 | `pip install` 时报 Boost / Eigen 找不到 | 用 Promethe-us fork 而不是 mainline；Ubuntu 22.04 用 apt 装 `libboost-all-dev libeigen3-dev`；准备一台备用机；实在不行先跑 **不带 IMU** 的纯 Mono 模式（论文里 Hierarchical 就是 mono-only） |
-| CUDA 11.8 与 RTX 40 系不兼容 | `RuntimeError: CUDA error: no kernel image is available` | 用 PyTorch 2.0.1+cu118；CUDA architecture 设 `8.9`；确认 `nvcc --version` 与 `torch.version.cuda` 一致 |
-| Sample Rasterizer build 失败 | `setup.py` 编译时报错 | 看 `submodules/diff-surfel-rasterization` 的 `CMakeLists`，确认 `TORCH_CUDA_ARCH_LIST` 包含本机算力 |
-| 显存爆 OOM | 跑到中段 CUDA OOM | 减小 `keyframe_window` / `n_iter_per_kf`；提前触发 `score_manager` 的 storage prune；跑短序列 |
-| 数据集下载慢 | HF / Waymo / KITTI 拉不下来 | 提前一周开始挂；用同济校园网；用 hf-mirror.com |
-| KITTI IMU 时间戳乱序 | 跑到一半 IMU 因子图发散 | 用论文提到的 fix 脚本（issue 里有），手动排序 |
-| 手机 APK 跑不起来 | 服务器连不上 / 协议不通 | 直接放弃手机端，把精力转到校园自采数据 |
-| 渲染指标比论文差很多 | PSNR 低 3 dB 以上 | 检查是否跑足训练迭代（每帧 80–100 iters）；检查是否打开 `use_vis=False` 但忘了关其他可视化导致掉帧；检查 metric_depth 权重是否加载 |
+| GTSAM vio 分支编译失败 | D1-D2 卡 A | A 多预留 1 天；先用纯 Mono 跑（论文 SmallCity 就是 mono-only），不阻塞 B/C |
+| 手机端 APK 与服务器连不通 | D8 D 卡住 | A 提前在 D6-D7 协助 D 打通；最坏情况 D 手机端只做"服务器侧建图 + 手机查看 BEV"，不强求完整推流 |
+| 校园数据采集天气不好 / 数据废 | D4 重采 | D5 必须重采，D4 数据当晚检查质量 |
+| Sample Rasterizer 在 4090 上编不过 | B 的实验 3 受阻 | 跳过该消融，仅对比原版 2DGS（仍能讲清楚问题）；不影响 main result |
+| KITTI 08 跑到 50% 卡死 | C 的实验 1 | 切到 KITTI 07（更短）；或者用前 2500 帧也行 |
+| BONN 数据集下载受限 | C 的实验 3 | 用 BONN 子集 / 用 TUM dynamic objects 替代 |
+| 报告写不完 | D14 紧张 | D10 是强制 freeze 日，已留 5 天写作 buffer |
 
 ---
 
-## 8. 最终交付清单（截止日前）
-
-仓库根目录应该长这样：
+## 7. 最终交付清单
 
 ```
 SLAM期末项目/
-├── README.md              # 项目入口
-├── VINGS.pdf              # 原论文
+├── README.md
+├── VINGS.pdf
 ├── SLAM复现论文作业要求.pdf
-├── third_party/VINGS-Mono/   # 官方代码（submodule）
+├── third_party/VINGS-Mono/         # 官方代码 submodule
 ├── docs/
-│   ├── REPRODUCTION_PLAN.md  # 本文件
-│   ├── SETUP.md              # 环境搭建踩坑记
-│   ├── ABLATION.md           # 消融实验
-│   ├── REPORT.pdf            # 最终报告
-│   └── SLIDES.pdf            # 答辩 PPT
-├── configs/                  # 我们改过的 yaml 副本
-├── scripts/                  # 自己写的辅助脚本（数据预处理、评测、可视化）
+│   ├── REPRODUCTION_PLAN.md        # 本计划
+│   ├── SETUP.md                    # A 负责，环境记录
+│   ├── ABLATION.md                 # B 负责，消融结果
+│   ├── REPORT.pdf                  # 最终报告（4 人协作，D 主笔排版）
+│   └── SLIDES.pdf                  # 答辩 PPT（合并版 / 也可以 4 个分册）
+├── configs/                        # 我们改过的 yaml（每个数据集 1 份）
+├── scripts/                        # 数据预处理、评测、可视化辅助脚本
 ├── results/
-│   ├── hotel/
-│   ├── smallcity/
-│   ├── kitti_07/
-│   ├── waymo_01/
-│   └── tongji_campus/        # 自采（如果做了）
+│   ├── frontend/                   # A
+│   ├── mapping/                    # B
+│   ├── ablation/                   # B
+│   ├── loop/                       # C
+│   ├── dynamic/                    # C
+│   ├── tongji_campus/              # D
+│   └── mobile/                     # D
 └── media/
-    ├── demo_smallcity.mp4
-    └── demo_video.mp4        # 答辩用 highlight reel
+    ├── demo_smallcity.mp4          # B 录
+    ├── demo_kitti08_loop.mp4       # C 录
+    ├── demo_tongji_campus.mp4      # D 录
+    ├── demo_mobile_indoor.mp4      # D 录
+    ├── demo_mobile_outdoor.mp4     # D 录
+    └── highlight_reel_3min.mp4     # D 剪 / 答辩用
 ```
 
 ---
 
-## 9. 下一步立即行动项（本周内）
+## 8. 答辩讲述结构（统一模板，避免互相重复）
 
-1. **组长（A）**：在群里收集 4 个人的硬件信息（GPU 型号、显存、CUDA 版本、操作系统），填到本文件第 3 节下方的"小组实际硬件清单"里。
-2. **每个人**：先把论文通读 1 遍，重点看 Sec. IV–VII（方法）和 Sec. VIII（实验）。
-3. **A & B**：本周内出 1 台能跑通 Hotel demo 的机器，写 `docs/SETUP.md` 第一版。
-4. **D**：去 HuggingFace 把 Hotel + SmallCity 数据下载到一台带大硬盘的机器上（demo 数据 ≈ 几十 GB，KITTI/Waymo 后面再下）。
-5. **C**：把论文 Sec. V (2D Gaussian Map) 和 Sec. VI (NVS Loop Closure) 各做一份 1 页中文笔记，下次例会讲给大家听。
+每人 **5 分钟**：
+
+1. **30 秒** — 这块在 VINGS-Mono 系统里位于哪里（用论文 Fig. 2 pipeline 图，高亮自己负责的方框）
+2. **2 分钟** — 方法关键点（贴 1–2 个公式 + 1 张算法/原理图）
+3. **2 分钟** — 我跑了什么实验，结果如何（贴表格 + 截图 / 视频）
+4. **30 秒** — 失败案例 / 局限 / 我学到了什么
+
+4 个人讲完正好 **20 分钟**。剩下 5–10 分钟留作 Q&A 和 highlight reel 播放。
 
 ---
 
-*本计划是 v1，跑通环境后会根据实际硬件 / 进度修订。* 
+## 9. 立即行动项（**今天 / D1**）
+
+1. **组长**：把这份计划在群里发给另外 3 个人，每人选自己愿意当 A / B / C / D（同等权重，按各人兴趣或专长分）。
+2. **A**：今晚或明天上午开 AutoDL 账号 + 充值 ~500 元，跑通"4090 实例 + 挂载 80GB 数据盘"。
+3. **D**：开始联系一台可用的 Android 手机（IMU 频率 ≥ 50 Hz，建议小米 / 一加 / 华为，**iOS 跑不动 Android APK，但 iOS 可以采集校园数据**）。
+4. **全员**：把论文 PDF 通读 1 遍，重点 Sec. IV-VII。
+
+---
+
+*v2 / 2026-05-19。计划在 D3、D6、D10 三个节点根据实际进度可修订。*

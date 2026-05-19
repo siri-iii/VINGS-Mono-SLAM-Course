@@ -38,14 +38,22 @@
 - 已知坑与应急预案
 - 最终交付清单
 
-简要里程碑：
+**15 天计划摘要**（硬件：AutoDL RTX 4090，4 人均衡分工）：
 
-- [ ] **W1**：4 人环境搭好，跑通 Hotel demo
-- [ ] **W2**：Hotel + SmallCity 两个官方 Demo 出结果 + 录屏
-- [ ] **W3**：在 Waymo / KITTI 至少 1 个 scene 上复现 ATE 与 PSNR
-- [ ] **W4**：完成 2 项消融实验（Score Manager + Pose Refinement）
-- [ ] **W5**（冲分）：同济校园自采数据 / 手机端
-- [ ] **W6**：报告 + PPT + 答辩 demo
+- **D1-D3**：环境搭建 + Hotel demo 跑通 + 制作 AutoDL 镜像
+- **D4-D6**：4 人并行实验（前端 / 建图 / 回环 / 校园采集）
+- **D7-D9**：消融实验 + 手机端联调 + 校园数据建图
+- **D10-D13**：报告 + PPT
+- **D14-D15**：彩排 + buffer
+
+**任务分工**（4 人对应 PPT 4 个章节，各自独立讲）：
+
+| 角色 | 负责 | PPT 主题 |
+| --- | --- | --- |
+| **A** | 视觉惯性前端 + AutoDL 部署 | "DBA + 因子图融合" |
+| **B** | 2D 高斯建图 + 3 项消融实验 | "Score Manager + Sample Rasterizer + Pose Refinement" |
+| **C** | 回环 + 动态物体 + 长序列 | "NVS 回环 + Dynamic Eraser" |
+| **D** | 同济校园自采 + 手机端复现 + 报告主笔 | "实地落地：校园建图 + 手机端 SLAM" |
 
 ## 小组分工
 
