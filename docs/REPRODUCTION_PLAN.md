@@ -295,13 +295,67 @@ SLAM期末项目/
 │   ├── tongji_campus/              # D
 │   └── mobile/                     # D
 └── media/
-    ├── demo_smallcity.mp4          # B 录
-    ├── demo_kitti08_loop.mp4       # C 录
-    ├── demo_tongji_campus.mp4      # D 录
-    ├── demo_mobile_indoor.mp4      # D 录
-    ├── demo_mobile_outdoor.mp4     # D 录
-    └── highlight_reel_3min.mp4     # D 剪 / 答辩用
+    ├── figures/                    # 静态图（详见 §7.5）
+    └── videos/                     # 录屏（详见 §7.5）
 ```
+
+---
+
+## 7.5 可视化产出清单（**by Person，D9 自检用**）
+
+> 每件可视化都明确 owner + 输出路径 + 用途，D9 之前每人对照打勾。
+
+### A — 视觉惯性前端（3 件）
+
+| # | 类型 | 文件 | 内容 | 用途 |
+| --- | --- | --- | --- | --- |
+| A1 | 录屏 | `media/videos/tracking_kitti07.mp4` | KITTI 07 DROID-SLAM DBA 收敛过程，30–60 秒 | PPT 方法页 |
+| A2 | 静态图 | `media/figures/traj_kitti07_compare.png` | 我们 / VINS-Mono / ORB-SLAM3 / DROID-SLAM / GT 五条轨迹叠加 | PPT 实验页 |
+| A3 | 静态图 | `media/figures/vio_vs_vo_bar.png` | mono-only vs mono+IMU 的 ATE/RPE 柱状图（KITTI 07 + Waymo Scene01） | PPT 实验页 |
+
+### B — 2D 高斯建图核心（5 件）
+
+| # | 类型 | 文件 | 内容 | 用途 |
+| --- | --- | --- | --- | --- |
+| B1 | 录屏 | `media/videos/demo_smallcity.mp4` | SmallCity 完整建图 BEV + RGB 并排，2 分钟 | PPT 实验页 + highlight reel |
+| B2 | 静态图 | `media/figures/render_compare.png` | GT vs Ours vs MonoGS vs PhotoSLAM 渲染对比拼图，论文图 7 同款 | PPT 实验页 |
+| B3 | 静态图 | `media/figures/score_manager_curve.png` | Score Manager 阈值 vs PSNR/GS 数量趋势曲线，论文表 VII 转图 | PPT 消融页 |
+| B4 | 静态图 | `media/figures/sample_rasterizer_bar.png` | 反传时间对比柱状图（原版 2DGS / Taming3DGS / Ours），论文图 11 同款 | PPT 消融页 |
+| B5 | 静态图 | `media/figures/pose_refine_traj.png` | Pose Refinement 3 策略轨迹差异叠加图，论文表 VIII 转图 | PPT 消融页 |
+
+### C — 回环 + 动态 + 长序列（5 件）
+
+| # | 类型 | 文件 | 内容 | 用途 |
+| --- | --- | --- | --- | --- |
+| C1 | 录屏 | `media/videos/demo_kitti08_loop.mp4` | KITTI 08 回环前/后对比，1 分钟 | PPT 实验页 + highlight reel |
+| C2 | 录屏 | `media/videos/demo_dynamic_eraser.mp4` | BONN 动态物体擦除前后渲染对比，30 秒 | PPT 动态页 |
+| C3 | 静态图 | `media/figures/kitti08_bev.png` | KITTI 08 完整 3.2 km BEV 大图，论文图 8 同款 | PPT 长序列页 |
+| C4 | 静态图 | `media/figures/loop_correction_compare.png` | 闭环 on/off 轨迹叠加 + 局部 Gaussian map 放大，论文图 10 同款 | PPT 回环页 |
+| C5 | 静态图 | `media/figures/waymo_mesh.png` | Waymo Scene01 TSDF mesh 在 CloudCompare 的渲染图，论文图 9 同款 | PPT 长序列页 |
+
+### D — 实地应用（7 件，含 highlight reel 主剪）
+
+| # | 类型 | 文件 | 内容 | 用途 |
+| --- | --- | --- | --- | --- |
+| D1 | 录屏 | `media/videos/demo_tongji_campus.mp4` | 同济校园 BEV 旋转 + Gaussian map 漫游，3 分钟 | PPT 校园页 + highlight reel |
+| D2 | 录屏 | `media/videos/demo_mobile_indoor.mp4` | 手机端室内演示，≥ 30 秒 | PPT 手机页 + highlight reel |
+| D3 | 录屏 | `media/videos/demo_mobile_outdoor.mp4` | 手机端室外演示，≥ 30 秒 | PPT 手机页 + highlight reel |
+| D4 | 静态图 | `media/figures/campus_gps_overlay.png` | 校园 Gaussian 轨迹与 Google Map 叠图，论文图 12 同款 | PPT 校园页 |
+| D5 | 静态图 | `media/figures/mobile_4panel.png` | 手机屏 RGB + BEV + 渲染深度 + 渲染法向 4 联屏截图，论文图 13 同款 | PPT 手机页 |
+| D6 | 静态图 | `media/figures/campus_vs_smallcity.png` | 校园数据 vs Hierarchical-SmallCity 横向对比 | PPT 校园页 |
+| D7 | **综合** | `media/videos/highlight_reel_3min.mp4` | 把全员录屏剪成 3 分钟答辩高光（A1 / B1 / C1 / D1-D3） | 答辩收尾 |
+
+### 总量
+
+| 人 | 录屏 | 静态图 | 综合 | 合计 |
+| --- | --- | --- | --- | --- |
+| A | 1 | 2 | 0 | 3 |
+| B | 1 | 4 | 0 | 5 |
+| C | 2 | 3 | 0 | 5 |
+| D | 3 | 3 | 1 | 7 |
+| **总计** | **7** | **12** | **1** | **20** |
+
+D 看上去最多，但 3 段录屏是采集时同步出片（不额外加工），主要工作量在 D7 highlight reel 剪辑 + 报告排版。
 
 ---
 
