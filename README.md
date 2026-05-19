@@ -24,14 +24,28 @@
 - `SLAM复现论文作业要求.pdf` — 课程作业要求
 - 后续将加入：环境配置脚本、复现代码、实验日志、报告等
 
-## 计划（占位，后续小组共同维护）
+## 复现计划
 
-- [ ] 阅读并整理论文核心方法
-- [ ] 按官方仓库（[Fudan-MAGIC-Lab/VINGS-Mono](https://github.com/Fudan-MAGIC-Lab/VINGS-Mono)）搭建 Python 3.9 + CUDA 11.8 环境
-- [ ] 下载预训练权重（droid.pth、metric depth、SuperPoint+LightGlue）
-- [ ] 跑通官方 Demo（SmallCity / Hotel）
-- [ ] 在 KITTI / KITTI360 上复现指标
-- [ ] 撰写实验报告 & 制作答辩 PPT
+详见 [`docs/REPRODUCTION_PLAN.md`](docs/REPRODUCTION_PLAN.md)，里面包含：
+
+- 课程目标对照（必做 / 可选）
+- 论文核心方法 5 大模块速读
+- 技术栈与依赖清单
+- 硬件评估（显存需求 / 风险）
+- 6 周阶段时间线（W1 环境 → W6 答辩）
+- 4 人任务分工建议
+- 复现成功的量化指标
+- 已知坑与应急预案
+- 最终交付清单
+
+简要里程碑：
+
+- [ ] **W1**：4 人环境搭好，跑通 Hotel demo
+- [ ] **W2**：Hotel + SmallCity 两个官方 Demo 出结果 + 录屏
+- [ ] **W3**：在 Waymo / KITTI 至少 1 个 scene 上复现 ATE 与 PSNR
+- [ ] **W4**：完成 2 项消融实验（Score Manager + Pose Refinement）
+- [ ] **W5**（冲分）：同济校园自采数据 / 手机端
+- [ ] **W6**：报告 + PPT + 答辩 demo
 
 ## 小组分工
 
