@@ -331,3 +331,43 @@ rm -rf /tmp/*
 ---
 
 *最后更新：2026-05-19，by A。在 AutoDL 跑通后逐项更新。*
+
+---
+
+## 12.1 A 在 D3 实际踩坑补充（2026-05-21）
+
+### 环境修复清单
+
+以下为跑通 Hotel demo 实际遇到的坑，均已修复：
+
+| 坑 | 现象 | 修复方式 |
+| --- | --- | --- |
+| `droid_backends` ImportError | `libc10.so: cannot open shared object file` | 运行前 `export LD_LIBRARY_PATH=<vings_vio>/torch/lib:$LD_LIBRARY_PATH` |
+| `metric_modules` 找不到 | `ModuleNotFoundError: No module named metric_modules` | `metric_model.py` 硬编码了作者机器路径，已改为动态推算 submodules 目录 |
+| `mmengine` / `mmcv` 缺失 | 导入 metric_modules 时报错 | `pip install mmengine==0.10.5 mmcv-full==1.7.2` |
+| `setuptools` 太新导致 `pkg_resources` 问题 | `ImportError: cannot import name packaging from pkg_resources` | `pip install setuptools==59.5.0` |
+| `html4vision` 缺失 | metric3d/mono/utils/visualization.py import 失败 | `pip install HTML4Vision` |
+| `gtsam_compat` 找不到 | `depth_video.py` 直接 `import gtsam_compat` | 运行前 `export PYTHONPATH=$SCRIPTS:$SCRIPTS/frontend` |
+| metric3d `mono_utils` 找不到 | `No module named metric_modules.metric3d.mono.mono_utils` | `ln -s mono/utils mono/mono_utils`（软链接） |
+| metric 权重路径错误 | `RuntimeError: No weight found at scripts/ckpts/...` | `metric_model.py` 改为从 `cfg[frontend][weight]` 推算 ckpts 目录 |
+
+### 最终运行命令
+
+```bash
+# 用提供的脚本（已包含所有环境变量设置）
+/root/run_hotel_demo.sh
+
+# 或手动：
+TORCH_LIB=/root/miniconda3/envs/vings_vio/lib/python3.9/site-packages/torch/lib
+SCRIPTS=/root/autodl-tmp/VINGS-Mono-SLAM-Course/third_party/VINGS-Mono/scripts
+export LD_LIBRARY_PATH=$TORCH_LIB:$LD_LIBRARY_PATH
+export PYTHONPATH=$SCRIPTS:$SCRIPTS/frontend:$PYTHONPATH
+cd $SCRIPTS
+conda activate vings_vio
+python run.py /root/autodl-tmp/VINGS-Mono-SLAM-Course/configs/rtg/hotel.yaml
+```
+
+### ONNX Runtime 警告（非致命）
+
+`libcufft.so.10: cannot open shared object file` — 这是 onnxruntime 的 CUDA provider 加载失败，LightGlue 会自动降级到 CPU 推理，**不影响建图结果**。
+
