@@ -99,3 +99,14 @@ use_metric: False
 use_storage_manager: True
 storage_manager:
   distance_threshold: 80.0
+use_loop: False
+looper:
+  lightglue_weight_dir: /root/autodl-tmp/VINGS-Mono-SLAM-Course/ckpts/lightglue/
+  onnx_w: 512
+  H: 344
+  W: 616
+  loop_radius: 15
+  is_loop_min_match_num: 45
+  search_num: 30
+  is_loop_mse_threshold: 0.15
+  is_loop_med_times: 100.0
