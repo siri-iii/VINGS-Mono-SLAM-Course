@@ -1,38 +1,18 @@
-"""Generate a lightweight KITTI-07 trajectory tracking MP4 from saved frontend poses."""
+"""Generate a lightweight KITTI-07 trajectory replay MP4 from saved frontend poses."""
 import argparse
-import glob
 import os
 
 import cv2
 import numpy as np
 
-GT_DIR = "/root/autodl-tmp/data/kitti_gt/dataset/poses"
+from eval_kitti import align_sim3, load_gt_poses, load_result_traj
+
 OUT_DIR = "/root/autodl-tmp/VINGS-Mono-SLAM-Course/media/videos"
 
 
-def load_droid_xyz(result_dir):
-    files = sorted(glob.glob(os.path.join(result_dir, "droid_c2w", "*.txt")))
-    poses = [np.loadtxt(path).reshape(4, 4) for path in files]
-    if not poses:
-        return np.empty((0, 3), dtype=np.float64)
-    return np.array([pose[:3, 3] for pose in poses], dtype=np.float64)
-
-
-def load_gt_xyz(seq):
-    raw = np.loadtxt(os.path.join(GT_DIR, f"{seq}.txt"))
-    poses = raw.reshape(-1, 3, 4)
-    return poses[:, :3, 3]
-
-
-def align_umeyama(src, dst):
-    mu_s, mu_d = src.mean(0), dst.mean(0)
-    cov = ((dst - mu_d).T @ (src - mu_s)) / len(src)
-    u, _, vt = np.linalg.svd(cov)
-    s = np.eye(3)
-    s[2, 2] = np.sign(np.linalg.det(u @ vt))
-    r = u @ s @ vt
-    t = mu_d - r @ mu_s
-    return (r @ src.T).T + t
+def align_xyz(src, dst):
+    scale, rot, trans = align_sim3(src, dst)
+    return (scale * (rot @ src.T)).T + trans
 
 
 def project(points_xz, bounds, width, height, margin=56):
@@ -59,19 +39,21 @@ def main():
     parser.add_argument("--out", default=os.path.join(OUT_DIR, "tracking_kitti07.mp4"))
     args = parser.parse_args()
 
-    gt = load_gt_xyz(args.seq)
-    vo = load_droid_xyz(args.vo_dir)
-    vio = load_droid_xyz(args.vio_dir)
-    if len(vo) == 0 and len(vio) == 0:
-        raise SystemExit("No frontend trajectories found")
+    gt_all = load_gt_poses(args.seq)
+    aligned = {"GT": gt_all[:, :3, 3]}
 
-    aligned = {"GT": gt}
-    if len(vo):
-        n = min(len(vo), len(gt))
-        aligned["VO"] = align_umeyama(vo[:n], gt[:n])
-    if len(vio):
-        n = min(len(vio), len(gt))
-        aligned["VIO"] = align_umeyama(vio[:n], gt[:n])
+    vo_idx, vo_poses, _ = load_result_traj(args.vo_dir)
+    if len(vo_poses):
+        vo_gt = gt_all[vo_idx]
+        aligned["VO"] = align_xyz(vo_poses[:, :3, 3], vo_gt[:, :3, 3])
+
+    vio_idx, vio_poses, _ = load_result_traj(args.vio_dir)
+    if len(vio_poses):
+        vio_gt = gt_all[vio_idx]
+        aligned["VIO"] = align_xyz(vio_poses[:, :3, 3], vio_gt[:, :3, 3])
+
+    if len(aligned) == 1:
+        raise SystemExit("No frontend trajectories found")
 
     all_xz = np.concatenate([xyz[:, [0, 2]] for xyz in aligned.values()], axis=0)
     pad = 8.0
@@ -93,7 +75,7 @@ def main():
         img = np.full((height, width, 3), 255, np.uint8)
         cv2.putText(img, f"KITTI-{args.seq} frontend trajectory replay", (48, 48),
                     cv2.FONT_HERSHEY_SIMPLEX, 1.0, (30, 30, 30), 2, cv2.LINE_AA)
-        cv2.putText(img, "Current run is diagnostic only; metrics are not target-valid.", (48, 84),
+        cv2.putText(img, "Timestamp-matched evaluation; current run remains below target accuracy.", (48, 84),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.62, (90, 90, 90), 1, cv2.LINE_AA)
         frac = (frame + 1) / frames
         for name in ["GT", "VO", "VIO"]:

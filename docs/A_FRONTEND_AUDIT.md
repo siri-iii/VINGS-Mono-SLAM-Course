@@ -4,35 +4,60 @@ Date: 2026-05-25
 
 ## Scope
 
-Audited Member A's frontend reproduction task against `docs/REPRODUCTION_PLAN.md`: environment setup, KITTI/Waymo frontend VO/VIO runs, result artifacts under `results/frontend`, setup notes, and visual assets.
+Audited and continued Member A's frontend reproduction task from `docs/REPRODUCTION_PLAN.md`: AutoDL environment, KITTI-07 VO/VIO, Waymo Scene01 VO, frontend metrics, and A visual assets.
 
-## Deliverable status
+## Current deliverable status
 
 | Item | Status | Evidence |
 | --- | --- | --- |
-| Environment and setup notes | Mostly complete | `docs/SETUP.md`, experiment configs, and helper scripts are present. |
-| KITTI 07 VO run | Runs, not target-valid | `results/frontend/kitti07_vo/05-23-23-06-kitti_sync-kitti07_vo-`, 233 predicted frames, ATE RMSE 26.183509 m, t_rel 93.686710%, r_rel 65.336528 deg/100m. |
-| KITTI 07 VIO run | Runs after compatibility fixes, not target-valid | `results/frontend/kitti07_vio/05-25-17-08-kitti_sync-kitti07_vio-`, 736 predicted frames, ATE RMSE 12825.2790 m, t_rel 7160.8962%, r_rel 84.8615 deg/100m. |
-| Waymo frontend run | Blocked | No Waymo dataset was found under `/root/autodl-tmp`; only configs/third-party references were present. |
-| A visual assets | Completed with current data | `media/figures/traj_kitti07_compare.png`, `media/figures/vio_vs_vo_bar.png`, `media/videos/tracking_kitti07.mp4`. The MP4 is a trajectory replay generated from saved poses, not a raw tracker screen recording. |
+| Environment and setup notes | Mostly complete | `docs/SETUP.md`, configs, local conda env, and helper scripts are present. |
+| KITTI-07 VO | Runs, below target | Best run: `results/frontend/kitti07_vo_dense/05-25-17-33-kitti_sync-kitti07_vo_dense-`, 727 matched frames, ATE 13.043128 m, t_rel 9.759937%, r_rel 3.002223 deg/100m. Target t_rel is <= 1.5%. |
+| KITTI-07 VIO | Runs, failed accuracy | Best ATE run: `results/frontend/kitti07_vio_dense/05-25-17-37-kitti_sync-kitti07_vio_dense-`, 737 matched frames, ATE 72.210345 m, t_rel 68.725937%, r_rel 65.566344 deg/100m. |
+| Waymo Scene01 VO | Blocked | `scripts/check_frontend_data.py` reports missing `/root/autodl-tmp/data/waymo/Scene01/{color,pose}`. No Waymo data exists on this server. |
+| A visual assets | Present | `media/figures/traj_kitti07_compare.png`, `media/figures/vio_vs_vo_bar.png`, `media/videos/tracking_kitti07.mp4`. The MP4 is a trajectory replay from saved poses, not a raw tracker GUI recording. |
+| Metrics table | Present | `results/frontend/a_frontend_summary.csv`. |
 
-## Fixes completed during audit
+## Work completed after audit
 
-- Added frontend-only execution handling so KITTI frontend experiments can finish without requiring mapper/loop components.
-- Added public-GTSAM compatibility fallbacks for marginalization and `GTSAM2BA` usage.
-- Fixed active-graph insertion and guarded marginal-factor reuse when marginalization is unavailable.
-- Preserved trajectory export in frontend-only runs through `droid_c2w` output.
-- Enabled `frontend_only: True` in KITTI VO, KITTI VIO, and Waymo frontend configs.
+- Fixed KITTI evaluation to match frontend outputs to GT by camera timestamp instead of positional row order.
+- Regenerated KITTI VO/VIO metrics with timestamp matching.
+- Added dense KITTI configs with `keyframe_thresh: 1.0` and reran both VO and VIO.
+- Regenerated A2/A3 figures and A1 MP4 from the dense runs.
+- Added `scripts/check_frontend_data.py` for explicit KITTI/Waymo data validation.
+- Added `scripts/eval_waymo.py` so Waymo Scene01 can be evaluated immediately after data is staged.
+- Kept the frontend-only compatibility fixes in `third_party/VINGS-Mono` so the runs complete without mapper/loop components.
+
+## Metric summary
+
+| Run | Frames | ATE RMSE (m) | t_rel (%) | r_rel (deg/100m) | Status |
+| --- | ---: | ---: | ---: | ---: | --- |
+| KITTI07 VO original | 233 | 19.485853 | 14.171275 | 3.201596 | Below target |
+| KITTI07 VO dense | 727 | 13.043128 | 9.759937 | 3.002223 | Best VO, below target |
+| KITTI07 VIO original | 736 | 72.524843 | 63.152289 | 65.343844 | Failed accuracy |
+| KITTI07 VIO dense | 737 | 72.210345 | 68.725937 | 65.566344 | Failed accuracy |
 
 ## Assessment
 
-Member A's task is only partially complete. The code path can now run the KITTI frontend experiments and produce expected artifact files, but the measured accuracy is far outside a publishable or target-valid reproduction. The current VIO result should be treated as a debugging baseline, not as a successful VIO reproduction, because it depends on compatibility fallbacks and skipped failed marginal factors.
+Member A's task is not fully successful on the scientific targets. The code now runs the KITTI frontend experiments and produces the requested result files, figures, and replay video, but the KITTI metrics are far outside the reproduction target. Dense keyframes improve VO, but not enough. VIO remains unstable and likely needs deeper repair in the IMU initialization, calibration/extrinsic chain, and GTSAM marginalization path rather than another small config change.
 
-Waymo remains incomplete until the actual dataset is staged on the server and the run is executed.
+Waymo cannot be completed on this server until the dataset is staged. The expected structure is:
 
-## Recommended next actions
+```text
+/root/autodl-tmp/data/waymo/Scene01/
+  color/*.jpg
+  pose/*.txt
+```
 
-1. Debug the KITTI pose convention, scale, timestamp alignment, and frontend-only trajectory export before presenting VO/VIO metrics.
-2. Replace the compatibility fallback marginalization with the intended VINGS/GTSAM extension if available, or validate the public-GTSAM fallback numerically.
-3. Stage Waymo data and run `configs/waymo/waymo01.yaml`.
-4. Regenerate visual assets after the metrics are corrected.
+After data is present, run:
+
+```bash
+python scripts/check_frontend_data.py
+/root/run_waymo_exp.sh
+python scripts/eval_waymo.py <latest results/frontend/waymo01 run dir>
+```
+
+## Remaining blockers
+
+1. Waymo Scene01 data is absent from the server.
+2. KITTI VIO depends on compatibility fallbacks for private GTSAM extension APIs; the fallback lets the run finish but does not reproduce the intended estimator quality.
+3. KITTI VO/VIO accuracy is still below target even with timestamp-correct evaluation and dense keyframes.
