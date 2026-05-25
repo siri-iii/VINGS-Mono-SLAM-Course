@@ -1,0 +1,4 @@
+mode,result_dir,pred_frames,gt_frames,ate_rmse_m,trel_pct,rrel_deg_per_100m,status
+KITTI07_VO,results/frontend/kitti07_vo/05-23-23-06-kitti_sync-kitti07_vo-,233,1101,26.183509,93.686710,65.336528,ran_but_not_target_valid
+KITTI07_VIO,results/frontend/kitti07_vio/05-25-17-08-kitti_sync-kitti07_vio-,736,1101,12825.2790,7160.8962,84.8615,ran_but_failed_accuracy
+Waymo01,,,,,,,blocked_no_dataset_found
