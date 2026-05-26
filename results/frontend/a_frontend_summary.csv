@@ -3,4 +3,5 @@ KITTI07_VO_ORIGINAL,results/frontend/kitti07_vo/05-23-23-06-kitti_sync-kitti07_v
 KITTI07_VO_DENSE,results/frontend/kitti07_vo_dense/05-25-17-33-kitti_sync-kitti07_vo_dense-,727,0,1047,13.043128,3.821954,9.759937,3.002223,best_vo_but_below_target
 KITTI07_VIO_ORIGINAL,results/frontend/kitti07_vio/05-25-17-08-kitti_sync-kitti07_vio-,736,0,1055,72.524843,0.004110,63.152289,65.343844,ran_failed_accuracy
 KITTI07_VIO_DENSE,results/frontend/kitti07_vio_dense/05-25-17-37-kitti_sync-kitti07_vio_dense-,737,0,1055,72.210345,0.002824,68.725937,65.566344,ran_failed_accuracy
+KITTI07_VIO_GUARDED,results/frontend/kitti07_vio/05-26-14-32-kitti_sync-kitti07_vio-,346,0,1019,64.620664,0.059111,61.143212,24.544240,ran_failed_accuracy_native_gtsam_guarded
 Waymo01,,,,,,,,,blocked_no_dataset_found
