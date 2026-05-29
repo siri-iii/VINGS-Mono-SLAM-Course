@@ -96,6 +96,17 @@ vis:
   pose_scale: 1.0
 
 
+looper:
+  lightglue_weight_dir: /root/autodl-tmp/VINGS-Mono-SLAM-Course/ckpts/lightglue/
+  onnx_w: 512
+  H: 344
+  W: 616
+  loop_radius: 15
+  is_loop_min_match_num: 45
+  search_num: 30
+  is_loop_mse_threshold: 0.15
+  is_loop_med_times: 100.0
+
 
 # 2024/10/01
 use_storage_manager: False
