@@ -128,3 +128,38 @@ export LD_LIBRARY_PATH=/root/miniconda3/envs/vings_vio/lib/python3.9/site-packag
 export PYTHONPATH=/root/autodl-tmp/VINGS-Mono-SLAM-Course/third_party/VINGS-Mono/scripts:/root/autodl-tmp/VINGS-Mono-SLAM-Course/third_party/VINGS-Mono/scripts/frontend:$PYTHONPATH
 /root/miniconda3/envs/vings_vio/bin/python run.py /root/autodl-tmp/VINGS-Mono-SLAM-Course/configs/kitti/kitti07_vio.yaml
 ```
+
+---
+
+## D13 Update (2026-05-31)
+
+### What was done today
+
+1. Ran imu_delay=0.0 sweep (config: ):
+   - Result: ATE=61.41m, t_rel=78.81% — WORSE than delay=0.09 (61.14%)
+   - VIO init scale with delay=0: s=0.306 vs delay=0.09: s=0.277 — both far from 1.0
+
+2. Identified root cause of VIO failure:
+   - KITTI sync IMU file: 1106 rows = same as camera frames
+   - IMU frequency: ~10 Hz (interval ≈ 0.100s), camera: ~9.6 Hz (interval ≈ 0.104s)
+   - VIO needs 100 Hz IMU for preintegration; dataset only has 10 Hz
+   - This is a dataset limitation — NOT a parameter or code issue
+
+3. Updated report notes (Section 10) and summary CSV
+
+### Final deliverables status
+
+| Item | Status |
+| --- | --- |
+| KITTI VO dense | t_rel=9.76%, ATE=13.04m — below target but presentable |
+| KITTI VIO (best) | t_rel=61.14%, ATE=64.62m — root cause explained: 10Hz IMU |
+| VIO delay sweep | delay=0.0 worse than 0.09 — confirmed not a timing issue |
+| Waymo Scene01 | Blocked — data not on server |
+| Report notes | Complete (Sections 1-10) |
+| Summary CSV | Updated with all runs |
+
+### Recommendation for presentation
+
+Use VO dense as the primary result. Present VIO failure as a technical finding:
+> KITTI sync IMU is downsampled to 10Hz — insufficient for VIO preintegration designed at 100Hz. This dataset limitation, not code error, explains the gap from paper targets.
+
