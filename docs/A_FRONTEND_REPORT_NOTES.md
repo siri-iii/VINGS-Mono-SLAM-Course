@@ -324,3 +324,41 @@ A 的任务里包含 Waymo Scene01 mono 实验，但服务器上没有 Waymo Sce
 实验过程中我们遇到两个比较关键的问题。第一个是评估对齐问题：VINGS-Mono 保存的轨迹文件以相机时间戳命名，不能直接按行号和 KITTI GT 对齐，所以我修改了评估脚本，按 camera timestamp 匹配预测轨迹和 GT 后再计算 ATE、t_rel 和 r_rel。第二个是 VIO 的 GTSAM 兼容问题：普通 GTSAM 缺少作者使用的私有接口，切换到 vio 分支后，原生 `marginalizeOut` 又会在约 80 帧处发生 C++ 段错误。最后我用 `PYTHONFAULTHANDLER` 定位到 `depth_video.py:1792`，保留 native `GTSAM2BA`，但将 `marginalizeOut` 改为 Python fallback，使 KITTI07 VIO 能完整跑完。
 
 最终结果是，前端链路已经基本跑通。VO dense 的 KITTI07 ATE 为 13.04 m，t_rel 为 9.76%；修复崩溃后的 VIO guarded run ATE 为 64.62 m，t_rel 为 61.14%。这些结果没有达到论文指标，说明当前 VIO 的初始化、标定或边缘化质量仍有较大差距。Waymo Scene01 部分因为服务器缺少数据，暂时标记为 blocked，但运行和评估脚本已经准备好。
+
+---
+
+## 10. D13 追加：VIO 失败根因确认（2026-05-31）
+
+### 10.1 根本原因：KITTI sync 数据集的 IMU 频率不足
+
+经过 D13 追加实验（imu_delay sweep），确认 VIO 失败的根本原因：
+
+**KITTI sync 数据集的 IMU 已被降采样到相机帧率（约 10 Hz），而 VINGS-Mono VIO 需要 100 Hz 高频 IMU 进行帧间预积分。**
+
+验证数据：
+- IMU 行数：1106（与相机帧数完全相同）
+- IMU 平均间隔：0.100 s（~10 Hz）
+- 相机平均间隔：0.104 s（~9.6 Hz）
+- 结论：每两帧之间只有 1 个 IMU 读数，无法进行多测量预积分
+
+### 10.2 额外实验：imu_delay=0.0
+
+新增运行：（imu_delay=0.00，其余不变）
+
+结果：
+| 指标 | imu_delay=0.09（之前最好） | imu_delay=0.00（新） |
+| --- | ---: | ---: |
+| Matched frames | 346 | 511 |
+| ATE RMSE | 64.62 m | 61.41 m |
+| t_rel | 61.14% | 78.81% |
+| r_rel | 24.54°/100m | 43.48°/100m |
+| VIO init scale (s) | 0.277 | 0.306 |
+
+两者尺度因子均远小于 1.0（理想值），且 imu_delay=0.0 的旋转误差更大。确认时间延迟不是主要原因。
+
+### 10.3 汇报建议补充
+
+可以在汇报中增加这一句：
+
+> 通过分析 IMU 数据频率，我们确认当前使用的 KITTI sync 数据集 IMU 已被下采样到约 10 Hz（每帧一个读数），而 VINGS-Mono VIO 前端依赖帧间多测量 IMU 预积分（设计频率为 100 Hz）。这一数据集限制是 VIO 指标大幅偏离论文目标的根本原因，而非参数调整或代码错误。
+

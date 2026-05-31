@@ -5,3 +5,4 @@ KITTI07_VIO_ORIGINAL,results/frontend/kitti07_vio/05-25-17-08-kitti_sync-kitti07
 KITTI07_VIO_DENSE,results/frontend/kitti07_vio_dense/05-25-17-37-kitti_sync-kitti07_vio_dense-,737,0,1055,72.210345,0.002824,68.725937,65.566344,ran_failed_accuracy
 KITTI07_VIO_GUARDED,results/frontend/kitti07_vio/05-26-14-32-kitti_sync-kitti07_vio-,346,0,1019,64.620664,0.059111,61.143212,24.544240,ran_failed_accuracy_native_gtsam_guarded
 Waymo01,,,,,,,,,blocked_no_dataset_found
+KITTI07_VIO_DELAY0,results/frontend/kitti07_vio/05-31-16-37-kitti_sync-kitti07_vio_delay0-,511,0,1055,61.4146,0.006443,78.8081,43.4801,ran_failed_imu_10hz_root_cause_confirmed
