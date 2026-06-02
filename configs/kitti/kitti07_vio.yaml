@@ -39,7 +39,7 @@ frontend:
   weight: /root/autodl-tmp/VINGS-Mono-SLAM-Course/ckpts/droid.pth
   image_size: [344, 616] # [240, 800]
   buffer: 80
-  filter_thresh: 2.4
+  filter_thresh: 2.0
   c2i: None
   # visual_only: 0 # 0 means VIO and 1 means VO.
   warm_up: 8
