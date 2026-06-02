@@ -1,0 +1,112 @@
+# Person C — KITTI odometry seq08 (= 2011_09_30_drive_0028) long-sequence mapping.
+# Full Gaussian mapping (frontend_only: False) for long-sequence stability + BEV (paper Fig 8/10).
+# NOTE: KITTI-08 has no large revisit loop; loop on/off comparison is done on seq00 (kitti00_loop_*).
+# mode 'vo': A's audit found the public VIO path has an unresolved scale problem on KITTI
+#            (scale~0.3, ATE>40m); mono VO is far more stable for a usable map/BEV.
+frontend_only: False
+use_wandb: False
+use_sky: False
+use_dynamic: False
+use_pose_refine: False
+use_metric: False
+
+mode: 'vo'   # 'vo' (stable map) or 'vio' (paper-faithful, but see note above)
+
+device:
+  tracker: 'cuda:0'
+  mapper: 'cuda:0'
+
+dataset:
+  root: /root/autodl-tmp/data/kitti_raw/2011_09_30/2011_09_30_drive_0028_sync/
+  module: datasets.kitti_sync
+  rgb_strip: 1
+  imu_delay: 0.05006
+
+middleware:
+  cov_times: 200
+  max_cov: 3e3
+  max_depth: 25
+
+output:
+  save_dir: /root/autodl-tmp/VINGS-Mono-SLAM-Course/results/loop/kitti08_long/
+
+# 707.0912 707.0912 601.8873 183.1104  (2011_09_30 calib)
+intrinsic:
+  H: 370
+  W: 1226
+  fu: 707.0912
+  fv: 707.0912
+  cu: 183.1104
+  cv: 601.8873
+  bg: 0
+
+frontend:
+  weight: /root/autodl-tmp/VINGS-Mono-SLAM-Course/ckpts/droid.pth
+  image_size: [240, 800]
+  buffer: 80
+  filter_thresh: 2.4
+  c2i: None
+  warm_up: 8
+  beta: 0.3
+  frontend_nms: 1
+  keyframe_thresh: 4.0
+  frontend_window: 5
+  frontend_thresh: 16.0
+  frontend_radius: 2
+  active_window: 12
+  max_factors: 48
+  far_threshold: 0.02
+  inac_range: 3
+  mask_threshold: -1.0
+  skip_edge: [-4,-5,-6]
+  translation_threshold: 0.5
+  show_plot: False
+
+adc_args:
+  accum_thresh: 0.98
+training_args:
+  num_keyframe: 8
+  iters: 100
+  lr:
+    _xyz_lr: 0.00001
+    _rgb_lr: 0.0001
+    _opacity_lr: 0.05
+    _scaling_lr: 0.001
+    _rotation_lr: 0.001
+  loss_weights:
+    rgb_loss: 1.0
+    depth_loss: 1.0
+    alpha_loss: 1.0
+    normal_loss: 0.1
+    dist_loss: 0.0
+
+use_vis: True
+vis:
+  bev_w2c: [[ 7.79311585e-01,  6.25885075e-01,  3.06810371e-02, -2.06689827e+02],
+       [ 3.61496698e-01, -4.09040286e-01, -8.37858092e-01, 9.32236153e+00],
+       [-5.11853094e-01,  6.64043611e-01, -5.45025222e-01, 1.87590669e+02],
+       [ 0.00000000e+00,  0.00000000e+00,  0.00000000e+00, 1.00000000e+00]]
+  bev_intrinsic_dict:
+    H: 1369
+    W: 2560
+    fu: 1185.5887777808966
+    fv: 1185.5887777808966
+    cu: 684
+    cv: 1279.5
+  pose_scale: 0.6
+
+use_storage_manager: True
+storage_manager:
+  distance_threshold: 70.0
+
+use_loop: True
+looper:
+  lightglue_weight_dir: /root/autodl-tmp/VINGS-Mono-SLAM-Course/ckpts/lightglue/
+  onnx_w: 512
+  H: 344
+  W: 616
+  loop_radius: 15
+  is_loop_min_match_num: 45
+  search_num: 30
+  is_loop_mse_threshold: 0.17
+  is_loop_med_times: 100.0

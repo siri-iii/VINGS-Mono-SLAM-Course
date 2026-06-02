@@ -1,0 +1,98 @@
+# Person C — BONN dynamic seq, Dynamic Eraser ablation (paper Table IV).
+# Monocular RGB input (VINGS is mono; baselines in Table IV use RGBD). Depth from Metric3D prior.
+# _off = use_dynamic False (baseline "Ours wo Eraser"); _on = use_dynamic True ("Ours w Eraser").
+# Table IV sequences: balloon(ball), person_tracking(ps tk), person_tracking2(ps tk2),
+#                     moving_nonobstructing_box2(mv box2).
+frontend_only: False
+use_wandb: False
+use_sky: False
+use_dynamic: True
+use_pose_refine: False
+use_metric: True
+use_loop: False
+
+mode: 'vo'
+
+device:
+  tracker: 'cuda:0'
+  mapper: 'cuda:0'
+
+dataset:
+  root: /root/autodl-tmp/data/bonn/rgbd_bonn_balloon/
+  module: datasets.bonn
+  rgb_strip: 1
+
+middleware:
+  cov_times: 100
+  max_cov: 1e4
+  max_depth: 8
+
+output:
+  save_dir: /root/autodl-tmp/VINGS-Mono-SLAM-Course/results/dynamic/bonn_balloon_on/
+
+# BONN RGB-D dynamic calibration: fx=542.822841 fy=542.576870 cx=315.593520 cy=237.756098, 640x480
+# config convention is [fv=fx, fu=fy, cv=cx, cu=cy]
+intrinsic:
+  H: 480
+  W: 640
+  fu: 542.576870
+  fv: 542.822841
+  cu: 237.756098
+  cv: 315.593520
+  resolution_scale: 1.0
+  bg: 0
+
+frontend:
+  weight: /root/autodl-tmp/VINGS-Mono-SLAM-Course/ckpts/droid.pth
+  image_size: [384, 512]
+  buffer: 80
+  filter_thresh: 2.4
+  c2i: None
+  warm_up: 8
+  beta: 0.3
+  frontend_nms: 1
+  keyframe_thresh: 4.0
+  frontend_window: 5
+  frontend_thresh: 4.0
+  frontend_radius: 2
+  active_window: 12
+  max_factors: 48
+  far_threshold: 0.02
+  inac_range: 3
+  mask_threshold: -1.0
+  skip_edge: [-4,-5,-6]
+  translation_threshold: 0.3
+  show_plot: False
+
+adc_args:
+  accum_thresh: 0.98
+training_args:
+  num_keyframe: 8
+  iters: 50
+  lr:
+    _xyz_lr: 0.00002
+    _rgb_lr: 0.0001
+    _opacity_lr: 0.02
+    _scaling_lr: 0.001
+    _rotation_lr: 0.001
+  loss_weights:
+    rgb_loss: 1.0
+    depth_loss: 1.0
+    alpha_loss: 0.5
+    normal_loss: 0.05
+    dist_loss: 0.0
+    smooth_loss: 0.0
+
+use_vis: False
+use_storage_manager: False
+
+looper:
+  lightglue_weight_dir: /root/autodl-tmp/VINGS-Mono-SLAM-Course/ckpts/lightglue/
+  onnx_w: 512
+  H: 384
+  W: 512
+  loop_radius: 15
+  is_loop_min_match_num: 45
+  search_num: 30
+  is_loop_mse_threshold: 0.15
+  is_loop_med_times: 100.0
