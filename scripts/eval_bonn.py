@@ -83,10 +83,15 @@ def evaluate(result_dir, seq_dir, max_dt=0.05):
 
 
 def _find_run(results_root, name):
-    # result dirs look like <save_dir>/<name>-<config>-... ; match the leaf containing name
-    hits = sorted(glob.glob(os.path.join(results_root, f"*{name}*")))
-    hits = [h for h in hits if os.path.isdir(h)]
-    return hits[-1] if hits else None
+    # run.py nests output as <results_root>/<name>/<runname>/{traj_final,...}.
+    # Return the newest leaf dir whose path contains `name` and holds traj_final/ (or droid_c2w/).
+    cands = []
+    for root, dirs, _ in os.walk(results_root):
+        if name in root and ("traj_final" in dirs or "droid_c2w" in dirs):
+            cands.append(root)
+    if not cands:
+        return None
+    return max(cands, key=lambda d: os.path.getmtime(d))
 
 
 def main():
