@@ -1,0 +1,5 @@
+KITTI-07 loop closure on/off
+            frames    ATE[m]    scale  t_rel[%]    r_rel
+OFF            356   19.6873   6.0664   14.6219   3.4706
+ON             358   18.8938   9.3558   13.0785   4.0088
+ATE improvement: 0.7935 m (4.0% reduction)
