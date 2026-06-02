@@ -139,11 +139,10 @@ export PYTHONPATH=/root/autodl-tmp/VINGS-Mono-SLAM-Course/third_party/VINGS-Mono
    - Result: ATE=61.41m, t_rel=78.81% — WORSE than delay=0.09 (61.14%)
    - VIO init scale with delay=0: s=0.306 vs delay=0.09: s=0.277 — both far from 1.0
 
-2. Identified root cause of VIO failure:
+2. Initially suspected a VIO data-rate limitation:
    - KITTI sync IMU file: 1106 rows = same as camera frames
    - IMU frequency: ~10 Hz (interval ≈ 0.100s), camera: ~9.6 Hz (interval ≈ 0.104s)
-   - VIO needs 100 Hz IMU for preintegration; dataset only has 10 Hz
-   - This is a dataset limitation — NOT a parameter or code issue
+   - This was corrected on 2026-06-01: the paper explicitly evaluates KITTI Sync with 10 Hz IMU, so 10 Hz alone does not explain the metric gap.
 
 3. Updated report notes (Section 10) and summary CSV
 
@@ -152,7 +151,7 @@ export PYTHONPATH=/root/autodl-tmp/VINGS-Mono-SLAM-Course/third_party/VINGS-Mono
 | Item | Status |
 | --- | --- |
 | KITTI VO dense | t_rel=9.76%, ATE=13.04m — below target but presentable |
-| KITTI VIO (best) | t_rel=61.14%, ATE=64.62m — root cause explained: 10Hz IMU |
+| KITTI VIO (best at the time) | t_rel=61.14%, ATE=64.62m — superseded by D14/D15 investigation |
 | VIO delay sweep | delay=0.0 worse than 0.09 — confirmed not a timing issue |
 | Waymo Scene01 | Blocked — data not on server |
 | Report notes | Complete (Sections 1-10) |
@@ -160,6 +159,57 @@ export PYTHONPATH=/root/autodl-tmp/VINGS-Mono-SLAM-Course/third_party/VINGS-Mono
 
 ### Recommendation for presentation
 
-Use VO dense as the primary result. Present VIO failure as a technical finding:
-> KITTI sync IMU is downsampled to 10Hz — insufficient for VIO preintegration designed at 100Hz. This dataset limitation, not code error, explains the gap from paper targets.
+Use VO dense as the primary result until the remaining public-reproduction gap is resolved. Do not present 10 Hz KITTI Sync IMU as the root cause; the paper uses the same nominal rate.
 
+
+---
+
+## D14 Update (2026-06-01)
+
+1. Confirmed the installed vio-branch GTSAM exposes native `marginalizeOut`, `BA2GTSAM`, `GTSAM2BA`, and `CustomHessianFactor` bindings.
+2. Removed the accidental Python override of `BA2GTSAM`; adapted its native augmented `[H | v]` return shape and routed visual factors through native `CustomHessianFactor`.
+3. Kept a thin `marginalizeOut` guard that filters keys absent from either `Values` or the graph, then invokes native C++ marginalization.
+4. Completed a full KITTI07 VIO rerun (`1106/1106`) without the previous segfault:
+   - Result: `results/frontend/kitti07_vio/06-01-10-27-kitti_sync-kitti07_vio-`
+   - Matched frames: `359`
+   - ATE: `39.710914 m`
+   - Sim3 scale: `0.874723`
+   - `t_rel`: `23.189987%`
+   - `r_rel`: `5.952185 deg/100m`
+5. Checked interpolated per-frame evaluation: `t_rel=24.244406%`, close to sparse-keyframe evaluation. Timestamp alignment is not the remaining root cause.
+6. Confirmed with NumPy that the staged metadata contains `1106` IMU rows and `1106` camera rows (about `10 Hz`; `wc -l` under-counts files without a trailing newline). The absence of unsynced high-rate OXTS is not sufficient to explain the remaining paper gap because the paper evaluates KITTI Sync at 10 Hz.
+
+---
+
+## D15 Update (2026-06-01)
+
+1. Checked the original paper and official repository:
+   - Paper Table III reports KITTI Sync sequence `07`: `t_rel=1.01%`, `r_rel=0.80 deg/100m`.
+   - The paper explicitly states that KITTI Sync uses `10 Hz` IMU data.
+   - Official sources: `https://arxiv.org/abs/2501.08286`, `https://github.com/Fudan-MAGIC-Lab/VINGS-Mono`, and `https://github.com/Fudan-MAGIC-Lab/VINGS-Mono/blob/main/docs/PREPARE_DATA.md`.
+2. Downloaded the official `KITTI_Sync.zip` metadata package and compared SHA256 hashes. Server copies of `c2i.txt`, `calib.txt`, `camstamp.txt`, and `imu.txt` for `2011_09_30_drive_0027_sync` match the official package byte-for-byte.
+3. Verified `ckpts/droid.pth` SHA256 matches the author-published Hugging Face file: `46476ef64cde45a97504910d6f3de2eef7b398ec1c6e4e668815c29076024526`.
+4. Verified installed GTSAM is the README-recommended private fork branch: `Promethe-us/gtsam@c572c6f32` (`origin/vio`), with all four native bindings present.
+5. Ran the author-provided `scripts/run_tracking.py` with the guarded compatibility path:
+   - Result: `results/frontend/kitti07_vio/06-01-10-50-kitti_sync-kitti07_vio-_official_tracking`
+   - ATE: `36.017960 m`
+   - Sim3 scale: `0.931983`
+   - `t_rel`: `20.840509%`
+   - `r_rel`: `9.466777 deg/100m`
+6. Ran the pre-shim author path in an isolated worktree at `a800d17`:
+   - Result: `results/frontend/kitti07_vio/06-01-11-03-kitti_sync-kitti07_vio-_author_baseline`
+   - ATE: `71.092135 m`
+   - Sim3 scale: `0.004053`
+   - `t_rel`: `72.732197%`
+   - `r_rel`: `64.341415 deg/100m`
+7. Ran a direct-native marginalization ablation while retaining the improved native visual-factor path:
+   - Result: `results/frontend/kitti07_vio/06-01-11-13-kitti_sync-kitti07_vio-_direct_marg`
+   - ATE: `78.373807 m`
+   - Sim3 scale: `0.346670`
+   - `t_rel`: `46.670746%`
+   - `r_rel`: `9.769437 deg/100m`
+8. Scanned raw-to-odometry GT offsets from `-8` to `+8` frames. The best guarded result remains about `20.82%`, so frame-index offset is not the cause.
+9. Current conclusion:
+   - Keep the guarded native compatibility path; it is the best tested public-repo path.
+   - The remaining difference from the paper is not explained by timestamps, metadata contents, checkpoint contents, GTSAM branch, or 10 Hz KITTI Sync IMU.
+   - The public repository does not include an official KITTI evaluation script or a reproducible command that reaches Table III. Ask the authors for the exact KITTI07 evaluation command, trajectory export path, and commit used for Table III before further parameter sweeps.

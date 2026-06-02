@@ -1,12 +1,12 @@
 # Person B Progress Log
 
-Updated: 2026-05-29
+Updated: 2026-05-31
 Owner: Person B
 Task package: 2D Gaussian Mapping Core
 
 ## Status Summary
 
-Current status: B7 completed. B6 configs prepared but ablation runs not yet launched. B8 configs prepared but runs not yet launched. Safe to shut down after saving this state.
+Current status: runnable Person B package completed with documented external-data boundaries. B6 Hotel fallback, B7 three-rasterizer profiling, B8 Hotel strategy fallback plus SmallCity ATE tooling, B9 deliverable organization, and B10 strict BEV assets are complete.
 
 ## Checklist
 
@@ -17,11 +17,11 @@ Current status: B7 completed. B6 configs prepared but ablation runs not yet laun
 | B3 | Run minimal environment smoke test | Done | 2026-05-28 | Hotel smoke ran to 142/405 frames under 180s timeout; environment, weights, data, tracker, and mapper verified |
 | B4 | Run Hotel demo | Done | 2026-05-28 | Full Hotel run completed, exit 0, final PLY generated |
 | B5 | Run Hierarchical-SmallCity demo | Done | 2026-05-28 | Full SmallCity run completed after adding missing looper config block, exit 0, final PLY generated |
-| B6 | Score Manager ablation | Prepared | 2026-05-28 | Target ScanNet-0106 and Waymo-Scene13 data unavailable; prepared Hotel fallback configs for thresholds 0/0.8/12.8/25.6/102.4, not run yet |
-| B7 | Sample Rasterizer profiling | Done | 2026-05-29 | profile_rasterizer_person_b.py ran 20 iters, 200k pts, 344x616; backward 5.36ms mean, total 7.06ms mean |
-| B8 | Pose Refinement ablation | Pending | 2026-05-28 | Not started |
-| B9 | Organize `docs/ABLATION.md` and `results/mapping/` | Pending | 2026-05-28 | Not started |
-| B10 | Prepare PPT and recording material | Pending | 2026-05-28 | Not started |
+| B6 | Score Manager ablation | Done | 2026-05-31 | Original datasets unavailable; completed Hotel fallback thresholds 0/0.8/12.8/25.6/102.4 and summarized final metrics |
+| B7 | Rasterizer profiling | Done | 2026-05-31 | Sample, Original 2DGS, and Taming3DGS official-source variants profiled with unified parameters |
+| B8 | Pose Refinement ablation | Done | 2026-05-31 | Completed v1/v2/curpose Hotel fallback; added generic Sim(3) ATE tool and measured SmallCity baseline ATE 4.144531 m |
+| B9 | Organize `docs/ABLATION.md` and `results/mapping/` | Done | 2026-05-31 | Added ablation document and CSV summaries |
+| B10 | Prepare PPT and recording material | Done | 2026-05-31 | Added PPT notes and strict 119.985-second SmallCity BEV trajectory recording |
 
 ## Activity Log
 
@@ -84,7 +84,7 @@ Python and CUDA environments:
 - `vings_vio` PyTorch: 2.0.1+cu118.
 - `vings_vio` CUDA availability: true.
 - `vings_vio` sees GPU 0 as NVIDIA GeForce RTX 4090.
-- `nvcc` is not on PATH by default, but exists at `/usr/local/cuda-12.8/bin/nvcc`.
+- `nvcc` is not on PATH by default. Extension rebuilds must use the matching CUDA 11.8 compiler at `/root/miniconda3/envs/vings_vio/bin/nvcc`, not the system CUDA 12.8 compiler.
 - `CUDA_HOME` is unset in the current shell. This may need to be set before compiling or rebuilding extensions.
 
 Key import check in `vings_vio` from `third_party/VINGS-Mono`:
@@ -242,19 +242,45 @@ Resolved issues:
 - B5 SmallCity needed a `looper` config block because `run.py` constructs `LoopModel` even when `use_loop` is absent. Added the block to `configs/hierarchical/smallcity.yaml`.
 - ONNXRuntime CUDA provider reports missing `libcufft.so.10`, but both Hotel and SmallCity continued and completed successfully with fallback behavior.
 
-Risks for B6 and later phases:
+Environment and data limitations:
 
 - The default `base` environment is not suitable for experiments; use `conda activate vings_vio`.
 - `CUDA_HOME` and `PATH` may need CUDA 12.8 paths if any extension rebuild is required.
 - Mapping scripts require `diff_surfel_rasterization` on `PYTHONPATH`; import works after adding the submodule path.
-- Score Manager ablation target datasets `ScanNet-0106` and `Waymo-Scene13` are not currently present on the server.
-- B6 fallback Hotel ablation configs are prepared but unexecuted; next session should run them and extract `[METRIC] num_of_gaussians` / `[METRIC] psnr` from logs.
+- Score Manager paper targets `ScanNet-0106` and `Waymo-Scene13` remain unavailable; completed B6 results therefore use the documented Hotel fallback.
 
 ### 2026-05-29
 
 - Completed B7 Sample Rasterizer profiling.
-- Ran  with 200k Gaussians, 20 iters, resolution 344×616, on RTX 4090 in vings_vio env.
+- Ran `scripts/profile_rasterizer_person_b.py` with 200k Gaussians, 20 iterations, resolution 344x616, on RTX 4090 in `vings_vio`.
 - Results: backward_ms_mean=5.36ms, total_ms_mean=7.06ms.
-- Saved raw JSON to .
-- B6 ablation runs (5 Hotel threshold configs) and B8 pose refinement runs (3 strategies, hotel_personb_120) not yet launched.
-- Next session: run B6 and B8 experiments, then B9 (ABLATION.md) and B10 (PPT material).
+- Saved raw JSON to `results/mapping/person_b/logs/b7_profile_200k_20260529.json`.
+- At the 2026-05-29 checkpoint, B6 and B8 were queued for the next server session.
+- Follow-up completed on 2026-05-31; see the next activity section.
+
+### 2026-05-31
+
+- Verified that all five B6 Hotel fallback Score Manager runs had completed successfully on 2026-05-29, including reruns for thresholds `12.8`, `25.6`, and `102.4`.
+- Extracted final B6 metrics to `results/mapping/person_b/summaries/score_manager_hotel_fallback.csv`.
+- Completed B8 pose refinement fallback runs for `v1`, `v2`, and `curpose` on `/root/autodl-tmp/data/hotel_personb_120/`; all three exited with status `0`.
+- Removed an upstream stale renderer branch that double-transformed world-space Gaussians and passed `rotations=None` without precomputed covariance when pose refinement was enabled.
+- Extracted B8 metrics to `results/mapping/person_b/summaries/pose_refine_hotel_subset.csv`; ATE remains unavailable because the fallback runtime does not emit it.
+- Added `docs/ABLATION.md` and `docs/PERSON_B_PPT_NOTES.md`.
+- Generated `media/videos/smallcity_mapping_person_b_2min.mp4` from 317 SmallCity visualization frames: 119.985 seconds, approximately 71.6 MB.
+- Added final SmallCity visualization screenshot: `media/figures/smallcity_mapping_final_person_b.png`.
+- Revalidated the final pose-refinement renderer fix with a controlled 30-second `v1` smoke run; it advanced to frame 63 before the expected timeout.
+
+### 2026-05-31 strict follow-up
+
+- Confirmed through the public upstream dataset listing and preparation notes that ScanNet-0106 and Waymo-Scene13 require external authorized staging; details are in `docs/PERSON_B_BLOCKERS.md`.
+- Found the matching CUDA 11.8 compiler inside `vings_vio`, compiled isolated official-source Original 2DGS and Taming3DGS rasterizers, and profiled all three variants with the same RGB loss.
+- Added generic Sim(3)-aligned evaluator `scripts/eval_pose_dir.py`; SmallCity baseline ATE is `4.144531 m` over 317 matched keyframes.
+- Added strict BEV generator `scripts/make_smallcity_bev_video_person_b.py` and generated `media/videos/smallcity_bev_mapping_person_b_2min.mp4`: 317 frames, 960x960, 119.985 seconds.
+
+### 2026-05-31 Waymo Scene13 preparation
+
+- Cloned the official NeuralSim repository and staged its fixed-commit `nr3d_lib` dependency under `/root/autodl-tmp/person_b_external/`.
+- Installed standalone `gsutil 5.37` and an isolated Python 3.9 Waymo preprocess environment with TensorFlow `2.11.0`, Waymo devkit `1.5.2`, and NumPy `1.21.5`.
+- Added `scripts/prepare_waymo_scene13.sh` and `scripts/export_neuralsim_waymo_to_vings.py`; exporter smoke test passed.
+- Confirmed Google Cloud Storage connectivity. The official Waymo bucket currently returns `401 Anonymous caller` until an authorized account is configured.
+- Remaining external input: authenticate Waymo access and provide the official `segment-*` id mapped to the VINGS author-local alias `Waymo_Scene13`.
