@@ -7,6 +7,8 @@ frontend_only: False
 use_wandb: False
 use_sky: False
 use_dynamic: True
+use_dynamic_frontend: True
+dynamic_mask_dir: /root/autodl-tmp/data/bonn/rgbd_bonn_person_tracking2/dynamic_masks
 use_pose_refine: False
 use_metric: True
 use_loop: False
@@ -46,12 +48,12 @@ frontend:
   weight: /root/autodl-tmp/VINGS-Mono-SLAM-Course/ckpts/droid.pth
   image_size: [384, 512]
   buffer: 80
-  filter_thresh: 2.4
+  filter_thresh: 1.2
   c2i: None
   warm_up: 8
   beta: 0.3
   frontend_nms: 1
-  keyframe_thresh: 4.0
+  keyframe_thresh: 2.0
   frontend_window: 5
   frontend_thresh: 4.0
   frontend_radius: 2
@@ -61,7 +63,7 @@ frontend:
   inac_range: 3
   mask_threshold: -1.0
   skip_edge: [-4,-5,-6]
-  translation_threshold: 0.3
+  translation_threshold: 0.1
   show_plot: False
 
 adc_args:

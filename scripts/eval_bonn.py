@@ -56,7 +56,7 @@ def load_gt(seq_dir):
     return gt[:, 0], gt[:, 1:4]  # timestamps, xyz
 
 
-def evaluate(result_dir, seq_dir, max_dt=0.05):
+def evaluate(result_dir, seq_dir, max_dt=0.05, interp=False):
     pred = load_pred(result_dir)
     color_ts = load_color_timestamps(seq_dir)
     gt_ts, gt_xyz = load_gt(seq_dir)
@@ -67,12 +67,20 @@ def evaluate(result_dir, seq_dir, max_dt=0.05):
         pred_ts.append(color_ts[fi]); pred_xyz.append(c2w[:3, 3])
     pred_ts = np.array(pred_ts); pred_xyz = np.array(pred_xyz)
     order = np.argsort(pred_ts); pred_ts, pred_xyz = pred_ts[order], pred_xyz[order]
-    # associate each pred ts to nearest gt ts
-    P, G = [], []
-    for ts, xyz in zip(pred_ts, pred_xyz):
-        j = int(np.argmin(np.abs(gt_ts - ts)))
-        if abs(gt_ts[j] - ts) <= max_dt:
-            P.append(xyz); G.append(gt_xyz[j])
+    if interp and len(pred_ts) >= 2:
+        # per-frame protocol: interpolate keyframe positions to every GT timestamp in range
+        lo, hi = pred_ts[0], pred_ts[-1]
+        sel = (gt_ts >= lo) & (gt_ts <= hi)
+        P = np.stack([np.interp(gt_ts[sel], pred_ts, pred_xyz[:, k]) for k in range(3)], axis=1)
+        G = gt_xyz[sel]
+    else:
+        # association protocol: nearest pred keyframe <-> gt
+        P, G = [], []
+        for ts, xyz in zip(pred_ts, pred_xyz):
+            j = int(np.argmin(np.abs(gt_ts - ts)))
+            if abs(gt_ts[j] - ts) <= max_dt:
+                P.append(xyz); G.append(gt_xyz[j])
+        P, G = np.array(P), np.array(G)
     if len(P) < 5:
         return dict(n=len(P), ate_cm=float("nan"), scale=float("nan"))
     P = np.array(P); G = np.array(G)
@@ -100,10 +108,11 @@ def main():
     ap.add_argument("--table", action="store_true")
     ap.add_argument("--results_root", default="results/dynamic")
     ap.add_argument("--bonn_root", default="/root/autodl-tmp/data/bonn")
+    ap.add_argument("--interp", action="store_true", help="per-frame eval: interpolate keyframes to all GT timestamps")
     args = ap.parse_args()
 
     if not args.table:
-        r = evaluate(args.result, args.seq_dir)
+        r = evaluate(args.result, args.seq_dir, interp=args.interp)
         print(f"matched={r['n']}  ATE={r['ate_cm']:.2f} cm  scale={r['scale']:.4f}")
         return
 
@@ -114,8 +123,8 @@ def main():
         seq_dir = os.path.join(args.bonn_root, f"rgbd_bonn_{name}")
         off_dir = _find_run(args.results_root, f"bonn_{name}_off")
         on_dir = _find_run(args.results_root, f"bonn_{name}_on")
-        off = evaluate(off_dir, seq_dir)["ate_cm"] if off_dir else float("nan")
-        on = evaluate(on_dir, seq_dir)["ate_cm"] if on_dir else float("nan")
+        off = evaluate(off_dir, seq_dir, interp=args.interp)["ate_cm"] if off_dir else float("nan")
+        on = evaluate(on_dir, seq_dir, interp=args.interp)["ate_cm"] if on_dir else float("nan")
         rows.append((label, off, on))
     print(f"\n{'BONN seq':12s}{'wo Eraser[cm]':>16s}{'w Eraser[cm]':>16s}")
     print("-" * 44)

@@ -46,12 +46,12 @@ frontend:
   weight: /root/autodl-tmp/VINGS-Mono-SLAM-Course/ckpts/droid.pth
   image_size: [384, 512]
   buffer: 80
-  filter_thresh: 2.4
+  filter_thresh: 1.2
   c2i: None
   warm_up: 8
   beta: 0.3
   frontend_nms: 1
-  keyframe_thresh: 4.0
+  keyframe_thresh: 2.0
   frontend_window: 5
   frontend_thresh: 4.0
   frontend_radius: 2
@@ -61,7 +61,7 @@ frontend:
   inac_range: 3
   mask_threshold: -1.0
   skip_edge: [-4,-5,-6]
-  translation_threshold: 0.3
+  translation_threshold: 0.1
   show_plot: False
 
 adc_args:
