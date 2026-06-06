@@ -21,9 +21,14 @@ BONN Table IV, per-frame ATE [cm] (`eval_bonn.py --interp`):
 | mv box2 | 29.01 | **22.75** | **−22%** |
 | **Avg.** | 27.06 | **23.00** | **−15%** |
 
-Conclusion: a **consistent on<off improvement**, largest where dynamic objects dominate the
-frame (box2, ps tk) — qualitatively matching the paper. Absolute values stay far from the paper
-(avg 4.34 cm) because of the frontend accuracy ceiling (see below) + conservative flow detection.
+**Caveat (rigorous same-window check):** the table above uses each run's own time span, but off/on
+are independent mono-VO runs of different length, so part of the gap is a coverage artifact. A
+**same-window** trajectory comparison (`media/figures/bonn_*_traj_compare.png`) shows a **clear,
+robust win only on `person_tracking`** (OFF 37.8 → ON 28.4 cm — the OFF run drifts off on a large
+excursion that masking the moving person prevents), and **no robust difference on box2/ps tk2/ball**
+(box2 same-window: OFF 20.5 vs ON 22.8). So the frontend integration is correct and *can* help where
+the moving object most disturbs tracking, but it is **not a consistent win across BONN**; absolute
+ATE stays far from the paper (frontend ceiling + conservative flow detection).
 
 ## Why the first attempt didn't reproduce Table IV
 Our earlier integration masked dynamic pixels in the **Gaussian mapping loss** → cleans the

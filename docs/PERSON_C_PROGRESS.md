@@ -9,7 +9,7 @@ PPT theme: "大场景一致性：NVS 回环检测 + 动态物体擦除".
 | --- | --- | --- |
 | **NVS Loop closure (KITTI-07 on/off)** | OFF ATE **19.69 m** (356 kf) → ON ATE **18.89 m** (358 kf); **10 loops detected**; −4.0% ATE | ✅ functioning |
 | **TSDF mesh (Waymo Scene13)** | `tsdf_mesh.ply`, 1.05M verts / 1.52M tris (Open3D ScalableTSDFVolume) | ✅ |
-| **BONN Dynamic Eraser (Table IV, cm, frontend-BA masking)** | ball 12.91→12.59 · **ps tk 37.82→28.41 (−25%)** · ps tk2 28.52→28.27 · **mv box2 29.01→22.75 (−22%)** · **avg 27.06→23.00 (−15%)** | ✅ on<off reproduced |
+| **BONN Dynamic Eraser (frontend-BA masking)** | eraser confirmed **active** in BA; same-window ablation: **ps tk 37.8→28.4 cm (ON avoids a frontend drift spike)**; box2/ps tk2/ball no robust same-window difference | ⚠️ helps on the dynamics-heavy seq; not consistent |
 
 Figures/tables: `media/figures/` (committed) + raw outputs in `results/` (gitignored) on the server.
 Frontend Dynamic Eraser detail: `docs/PERSON_C_FRONTEND_ERASER.md`.
@@ -21,11 +21,15 @@ Frontend Dynamic Eraser detail: `docs/PERSON_C_FRONTEND_ERASER.md`.
 - *Dynamic Eraser*: **two stages.** (1) First integration masked dynamic pixels in the *Gaussian
   mapping loss* → cleans the map but not the poses → on/off ATE was noise-level. (2) **Fixed**:
   the eraser now masks dynamic correspondences inside the **DROID frontend BA** (per-edge `weight`,
-  shape `(E,2,48,64)`), so it affects the trajectory. Result: a **consistent on<off improvement**
-  (avg −15%; −22~25% on the sequences where dynamic objects dominate, exactly the paper's claim).
-  Absolute numbers stay far from the paper (avg 23 vs 4.34 cm) due to the **frontend accuracy
-  ceiling** (public code can't reach paper KITTI Table III; mono scale unstable) and our
-  conservative optical-flow dynamic detection (balloon / ps tk2 under-detected → no signal).
+  `(E,2,48,64)`); confirmed active (`mean_keep≈0.978`). **Rigorous (same-window) finding**: the
+  raw `eval_bonn --interp` table (avg 27.06→23.00) is partly a **trajectory-coverage artifact**
+  (off/on are independent mono-VO runs of different length/span). A same-window comparison shows a
+  **clear, robust win only on `person_tracking`** (OFF 37.8 → ON 28.4 cm; the OFF run drifts off on
+  a large excursion that masking the moving person prevents — see `bonn_ptrack_traj_compare.png`),
+  and **no robust difference** on box2/ps tk2/ball (e.g. box2 same-window OFF 20.5 vs ON 22.8).
+  So: the frontend integration is correct and *can* help where the moving object most disturbs the
+  frontend, but it is **not a consistent win across BONN**, and absolute ATE stays far from the
+  paper (mono scale unstable; flow-based dynamic detection conservative; frontend accuracy ceiling).
 - *KITTI-08 3.2 km*: not run — S3 bandwidth (~24 KB/s) made the 4.23 GB image set infeasible; the
   loop/long deliverable uses KITTI-07 instead.
 
