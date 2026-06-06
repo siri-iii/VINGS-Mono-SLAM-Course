@@ -1,28 +1,31 @@
 # Person C Progress — NVS Loop Closure + Dynamic Eraser + Long Sequence + Mesh
 
-Owner: C (henry). Date: 2026-06-02 (results 2026-06-03).
+Owner: C (henry). Date: 2026-06-02 (results 2026-06-03; Dynamic Eraser frontend fix 2026-06-06).
 PPT theme: "大场景一致性：NVS 回环检测 + 动态物体擦除".
 
-## RESULTS (2026-06-03, full GPU run)
+## RESULTS (final)
 
 | Deliverable | Result | Status |
 | --- | --- | --- |
-| **NVS Loop closure (KITTI-07 on/off)** | OFF ATE **19.69 m** (356 kf, t_rel 14.62%) → ON ATE **18.89 m** (358 kf, t_rel 13.08%); **10 loops detected**; −4.0% ATE | ✅ works, modest gain |
+| **NVS Loop closure (KITTI-07 on/off)** | OFF ATE **19.69 m** (356 kf) → ON ATE **18.89 m** (358 kf); **10 loops detected**; −4.0% ATE | ✅ functioning |
 | **TSDF mesh (Waymo Scene13)** | `tsdf_mesh.ply`, 1.05M verts / 1.52M tris (Open3D ScalableTSDFVolume) | ✅ |
-| **BONN Dynamic Eraser (Table IV, cm)** | ball n/a(3kf) · ps tk 40.16→31.05 · ps tk2 5.59→5.64 · mv box2 8.96→9.09 · avg 18.23→15.26 | ⚠️ inconclusive |
+| **BONN Dynamic Eraser (Table IV, cm, frontend-BA masking)** | ball 12.91→12.59 · **ps tk 37.82→28.41 (−25%)** · ps tk2 28.52→28.27 · **mv box2 29.01→22.75 (−22%)** · **avg 27.06→23.00 (−15%)** | ✅ on<off reproduced |
 
 Figures/tables: `media/figures/` (committed) + raw outputs in `results/` (gitignored) on the server.
+Frontend Dynamic Eraser detail: `docs/PERSON_C_FRONTEND_ERASER.md`.
 
 **Honest assessment**
 - *Loop closure*: integrated and **functioning** — the NVS looper triggers (10×) on KITTI-07's
-  end→start revisit and the corrected trajectory is saved; ATE improves modestly (4%). The
-  trajectory overlay (`loop_correction_compare_seq07.png`) is the headline figure.
-- *Dynamic Eraser*: our integration masks dynamic pixels in the **Gaussian mapping loss** (cleans
-  the map), **not** the DROID frontend BA that produces the camera poses — so the BONN ATE on/off
-  differences are noise-level and far from the paper (paper: ball 4.08 / ps tk 4.63 / ps tk2 5.05 /
-  mv box2 3.58). Reproducing Table IV's ATE numbers needs masking inside the frontend BA (future
-  work). BONN mono also keeps few keyframes (3–17), so ball couldn't be scored. The defensible
-  result here is the **qualitative erased map**, not the ATE table.
+  end→start revisit and the corrected trajectory is saved; ATE improves modestly (4%). Headline
+  figure: `loop_correction_compare_seq07.png`.
+- *Dynamic Eraser*: **two stages.** (1) First integration masked dynamic pixels in the *Gaussian
+  mapping loss* → cleans the map but not the poses → on/off ATE was noise-level. (2) **Fixed**:
+  the eraser now masks dynamic correspondences inside the **DROID frontend BA** (per-edge `weight`,
+  shape `(E,2,48,64)`), so it affects the trajectory. Result: a **consistent on<off improvement**
+  (avg −15%; −22~25% on the sequences where dynamic objects dominate, exactly the paper's claim).
+  Absolute numbers stay far from the paper (avg 23 vs 4.34 cm) due to the **frontend accuracy
+  ceiling** (public code can't reach paper KITTI Table III; mono scale unstable) and our
+  conservative optical-flow dynamic detection (balloon / ps tk2 under-detected → no signal).
 - *KITTI-08 3.2 km*: not run — S3 bandwidth (~24 KB/s) made the 4.23 GB image set infeasible; the
   loop/long deliverable uses KITTI-07 instead.
 

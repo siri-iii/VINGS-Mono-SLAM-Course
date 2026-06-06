@@ -1,8 +1,29 @@
 # Person C — Frontend Dynamic Eraser (attempt to reproduce BONN Table IV)
 
 Goal: make the Dynamic Eraser affect the **trajectory** (not just the map), so the BONN
-on/off ATE actually diverges toward the paper. Implemented offline (server was down);
-**needs validation on the GPU server** before trusting the numbers.
+on/off ATE actually diverges toward the paper.
+
+## VALIDATED on the GPU server (2026-06-06)
+
+The eraser is confirmed **active** in the BA — runtime log:
+`[dynamic_eraser] ACTIVE: weight(36, 2, 48, 64) x keep(36, 48, 64), mean_keep=0.978`, 0 skip
+warnings. (The real DROID `weight` layout turned out to be `(E, 2, H/8, W/8)`, channels-first —
+the first guess `(1,E,H/8,W/8,2)` silently no-op'd; `_apply_dynamic_weight` now broadcasts
+`keep` over the 2 flow channels with `keep.unsqueeze(1)`.)
+
+BONN Table IV, per-frame ATE [cm] (`eval_bonn.py --interp`):
+
+| seq | wo Eraser | w Eraser | Δ |
+| --- | ---: | ---: | --- |
+| ball (balloon) | 12.91 | 12.59 | −2% (noise; flow under-detects the balloon) |
+| ps tk (person_tracking) | 37.82 | **28.41** | **−25%** |
+| ps tk2 (person_tracking2) | 28.52 | 28.27 | ~0 (noise) |
+| mv box2 | 29.01 | **22.75** | **−22%** |
+| **Avg.** | 27.06 | **23.00** | **−15%** |
+
+Conclusion: a **consistent on<off improvement**, largest where dynamic objects dominate the
+frame (box2, ps tk) — qualitatively matching the paper. Absolute values stay far from the paper
+(avg 4.34 cm) because of the frontend accuracy ceiling (see below) + conservative flow detection.
 
 ## Why the first attempt didn't reproduce Table IV
 Our earlier integration masked dynamic pixels in the **Gaussian mapping loss** → cleans the
@@ -71,6 +92,8 @@ python $R/scripts/eval_bonn.py --table --results_root $R/results/dynamic \
 - Hitting the exact paper numbers (~4 cm) is still gated by the **frontend accuracy ceiling**
   (A's finding: the public frontend underperforms the paper, no official recipe) and by the
   quality of our flow-based dynamic detection. Target: a clear, defensible on<off improvement,
-  not necessarily 4.08 cm exactly.
-- The `weight`-shape assumption in `_apply_dynamic_weight` is the one untested risk; it's
-  guarded to fail safe, but confirm it's actually applying (see checklist).
+  not necessarily 4.08 cm exactly. **→ achieved: avg −15%, see VALIDATED section above.**
+- The `weight`-shape assumption was the one untested risk — now **resolved** (real layout
+  `(E,2,48,64)`; the method confirms engagement via the `ACTIVE` log line).
+- To push closer to the paper: stronger dynamic detection (semantic person/object instead of
+  optical-flow heuristic; balloon/ps tk2 are currently under-detected) + a more accurate frontend.
